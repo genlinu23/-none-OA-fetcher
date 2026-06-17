@@ -100,10 +100,8 @@ def _resolve_python_exe() -> str:
 
 
 def _default_app_home() -> Path:
-    if getattr(sys, "frozen", False):
-        base = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or str(Path.home())
-        return Path(base) / "PKU Literature Workbench"
-    return SKILL_ROOT
+    base = os.environ.get("APPDATA") or os.environ.get("LOCALAPPDATA") or str(Path.home())
+    return Path(base) / "PKU Literature Workbench"
 
 
 def _resource_root() -> Path:
@@ -357,6 +355,13 @@ class LigenWebController:
         self._merge_state(payload)
         self._refresh_output_dir_if_needed()
         return self.get_state_payload()
+
+    def test_agent_connection(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._merge_state(payload)
+        result = _test_agent_connection()
+        state = self.get_state_payload()
+        state["agent_test"] = result
+        return state
 
     def handle_research_agent_turn(self, payload: dict[str, Any]) -> dict[str, Any]:
         message = str(payload.get("message") or payload.get("user_message") or "").strip()
@@ -1269,19 +1274,29 @@ def _save_agent_config_from_payload(payload: dict[str, Any]) -> None:
     if not any(key in payload for key in ("agent_api_key", "agent_base_url", "agent_model", "agent_clear_api_key")):
         return
     current = _load_agent_config_file()
+    changed = False
     if bool(payload.get("agent_clear_api_key")):
         current.pop("api_key", None)
+        changed = True
     api_key = str(payload.get("agent_api_key") or "").strip()
     if api_key and "••" not in api_key and api_key.lower() not in {"saved", "configured"}:
         current["api_key"] = api_key
+        changed = True
     for source_key, target_key in (("agent_base_url", "base_url"), ("agent_model", "model")):
         if source_key not in payload:
             continue
         value = str(payload.get(source_key) or "").strip()
         if value:
+            if current.get(target_key) != value:
+                changed = True
             current[target_key] = value
         else:
-            current.pop(target_key, None)
+            if target_key in current:
+                changed = True
+                current.pop(target_key, None)
+    if changed:
+        for key in ("last_test_ok", "last_test_at", "last_test_message"):
+            current.pop(key, None)
     AGENT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     AGENT_CONFIG_PATH.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
 
@@ -1326,6 +1341,9 @@ def _agent_config_status() -> dict[str, Any]:
     model = saved.get("model", "").strip() or os.environ.get("LIGEN_AGENT_MODEL", "").strip() or DEFAULT_AGENT_MODEL
     return {
         "available": bool(api_key),
+        "verified": str(saved.get("last_test_ok") or "").lower() == "true",
+        "last_test_at": saved.get("last_test_at", ""),
+        "last_test_message": saved.get("last_test_message", ""),
         "model": model,
         "base_url": base_url,
         "source": "local_settings" if saved_api_key else ("environment" if env_api_key else "missing"),
@@ -1336,6 +1354,55 @@ def _agent_config_status() -> dict[str, Any]:
         "settings_path": str(AGENT_CONFIG_PATH),
         "restart_required": False,
     }
+
+
+def _save_agent_connection_test(ok: bool, message: str) -> None:
+    current = _load_agent_config_file()
+    current["last_test_ok"] = "true" if ok else "false"
+    current["last_test_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    current["last_test_message"] = message[:240]
+    AGENT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
+    AGENT_CONFIG_PATH.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _test_agent_connection() -> dict[str, Any]:
+    config = _agent_llm_config()
+    if not config:
+        message = "未检测到 API Key。"
+        _save_agent_connection_test(False, message)
+        return {"ok": False, "message": message}
+    body = {
+        "model": config["model"],
+        "temperature": 0,
+        "max_tokens": 16,
+        "messages": [
+            {"role": "system", "content": "Reply with OK only."},
+            {"role": "user", "content": "ping"},
+        ],
+    }
+    url = f"{config['base_url']}/chat/completions"
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(body, ensure_ascii=False).encode("utf-8"),
+        headers={
+            "Authorization": f"Bearer {config['api_key']}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    timeout = max(1.0, _safe_float(config.get("request_timeout_seconds", ""), DEFAULT_AGENT_REQUEST_TIMEOUT_SECONDS))
+    try:
+        with _open_agent_request_with_retry(request, config=config, timeout=timeout) as response:
+            raw = response.read().decode("utf-8", errors="replace")
+        payload = json.loads(raw)
+        content = str(payload["choices"][0]["message"]["content"]).strip()
+        message = f"连接成功：{config['model']} · {config['base_url']}"
+        _save_agent_connection_test(True, message)
+        return {"ok": True, "message": message, "sample": content[:80]}
+    except Exception as exc:
+        message = f"连接失败：{type(exc).__name__}: {exc}"
+        _save_agent_connection_test(False, message)
+        return {"ok": False, "message": message}
 
 
 def _build_research_agent_reply(
@@ -2253,6 +2320,9 @@ class LigenRequestHandler(BaseHTTPRequestHandler):
                 return
             if self.path == "/api/research/agent-turn":
                 self._send_json(controller.handle_research_agent_turn(payload))
+                return
+            if self.path == "/api/research/test-agent":
+                self._send_json(controller.test_agent_connection(payload))
                 return
             if self.path == "/api/research/draft":
                 self._send_json(controller.create_research_draft(payload))

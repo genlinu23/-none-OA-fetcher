@@ -154,6 +154,8 @@ export default function App() {
   const progress = serverState.progress || {};
   const researchProgress = research.progress || {};
   const agentConfig = research.agent_config || {};
+  const agentVerified = Boolean(agentConfig.verified);
+  const agentConfigured = Boolean(agentConfig.available);
   const researchStage = getResearchStage(research);
   const doiFiles = research.doi_files || {};
   const oaSummary = research.oa_summary || {};
@@ -469,13 +471,20 @@ export default function App() {
                 <div>
                   <p className="text-sm font-bold">Agent 连接状态</p>
                   <p className="mt-1 text-sm text-muted-foreground">
-                    {agentConfig.available
-                      ? `已连接：${asText(agentConfig.model, "默认模型")} · ${asText(agentConfig.base_url, "")}`
-                      : "未配置：在这里填入 API Key、Base URL 和模型名后保存。"}
+                    {agentVerified
+                      ? `已验证：${asText(agentConfig.model, "默认模型")} · ${asText(agentConfig.base_url, "")}`
+                      : agentConfigured
+                        ? `已保存配置，尚未验证：${asText(agentConfig.model, "默认模型")} · ${asText(agentConfig.base_url, "")}`
+                        : "未配置：在这里填入 API Key、Base URL 和模型名后保存。"}
                   </p>
+                  {asText(agentConfig.last_test_message) ? (
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      最近测试：{asText(agentConfig.last_test_message)}
+                    </p>
+                  ) : null}
                 </div>
-                <StatusPill tone={agentConfig.available ? "ok" : "idle"}>
-                  {agentConfig.available ? "可用" : "未配置"}
+                <StatusPill tone={agentVerified ? "ok" : agentConfigured ? "warm" : "idle"}>
+                  {agentVerified ? "已验证" : agentConfigured ? "待测试" : "未配置"}
                 </StatusPill>
               </div>
               <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_1fr_0.8fr]">
@@ -508,6 +517,9 @@ export default function App() {
               <div className="mt-3 flex flex-wrap items-center gap-3">
                 <Button onClick={() => runAction("/api/analyze", "Agent 设置已保存")}>
                   保存 Agent 设置
+                </Button>
+                <Button variant="warm" onClick={() => runAction("/api/research/test-agent", "Agent 连接测试完成")}>
+                  测试连接
                 </Button>
                 <Button variant="ghost" onClick={() => runAction("/api/analyze", "已清除本机保存的 API Key", { agent_clear_api_key: true, agent_api_key: "" })}>
                   清除已保存 Key
@@ -725,10 +737,11 @@ export default function App() {
   );
 }
 
-function StatusPill({ children, tone = "idle" }: { children: React.ReactNode; tone?: "idle" | "ok" }) {
+function StatusPill({ children, tone = "idle" }: { children: React.ReactNode; tone?: "idle" | "ok" | "warm" }) {
+  const dotClass = tone === "ok" ? "bg-[#17745f]" : tone === "warm" ? "bg-[#c49a2c]" : "bg-[#a66b18]";
   return (
     <span className="inline-flex max-w-full items-center gap-2 rounded-xl border border-border bg-white/75 px-3 py-2 text-sm text-foreground">
-      <span className={`h-2 w-2 shrink-0 rounded-full ${tone === "ok" ? "bg-[#17745f]" : "bg-[#a66b18]"}`} />
+      <span className={`h-2 w-2 shrink-0 rounded-full ${dotClass}`} />
       <span className="truncate">{children}</span>
     </span>
   );
