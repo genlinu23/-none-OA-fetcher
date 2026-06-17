@@ -1,0 +1,2725 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Peking University Literature Console</title>
+  <meta name="theme-color" content="#8b0012">
+  <meta name="description" content="Local-only PKU-branded literature console for DOI harvesting, keyword confirmation, and title review.">
+  <link rel="icon" type="image/png" href="/assets/pku-icon.png">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <style>
+    :root {
+      --pku-red: #8b0012;
+      --pku-red-deep: #69000d;
+      --pku-gold: #b78b4a;
+      --pku-ink: #1a1414;
+      --pku-paper: #f7f1eb;
+      --pku-warm: #f4ece3;
+      --pku-white: rgba(255, 252, 248, 0.94);
+      --muted: #6b5d59;
+      --line: rgba(40, 24, 24, 0.10);
+      --line-strong: rgba(40, 24, 24, 0.18);
+      --ok: #1f6f5d;
+      --warn: #9b6a23;
+      --danger: #9d3028;
+      --shadow: 0 28px 80px rgba(54, 24, 24, 0.12);
+      --serif: "STSong", "Songti SC", "SimSun", "Noto Serif SC", serif;
+      --sans: "Aptos", "Segoe UI Variable", "Microsoft YaHei UI", sans-serif;
+      --mono: "Cascadia Mono", "Consolas", monospace;
+      --radius-xl: 34px;
+      --radius-lg: 24px;
+      --radius-md: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: var(--sans);
+      color: var(--pku-ink);
+      background:
+        radial-gradient(circle at 10% 10%, rgba(139,0,18,0.12), transparent 22%),
+        radial-gradient(circle at 90% 0%, rgba(183,139,74,0.16), transparent 26%),
+        radial-gradient(circle at 50% 100%, rgba(139,0,18,0.08), transparent 24%),
+        linear-gradient(180deg, #fbf7f2 0%, #f5ede4 48%, #f8f2ec 100%);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(139,0,18,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139,0,18,0.04) 1px, transparent 1px);
+      background-size: 44px 44px;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.35), transparent 82%);
+    }
+    .splash {
+      position: fixed;
+      inset: 0;
+      z-index: 80;
+      display: grid;
+      place-items: center;
+      background:
+        radial-gradient(circle at center, rgba(255,255,255,0.12), transparent 40%),
+        linear-gradient(180deg, rgba(96,0,12,0.96), rgba(139,0,18,0.98));
+      color: white;
+      transition: opacity 500ms ease, visibility 500ms ease;
+    }
+    .splash.hidden {
+      opacity: 0;
+      visibility: hidden;
+      pointer-events: none;
+    }
+    .splash-inner {
+      width: min(560px, calc(100vw - 40px));
+      text-align: center;
+      animation: fadeRise 800ms ease;
+    }
+    .splash-logo {
+      width: 96px;
+      height: 96px;
+      object-fit: contain;
+      margin-bottom: 24px;
+      filter: drop-shadow(0 14px 26px rgba(0,0,0,0.22));
+    }
+    .splash-title {
+      font-family: var(--serif);
+      font-size: clamp(34px, 7vw, 66px);
+      letter-spacing: -0.04em;
+      line-height: 1;
+      margin: 0 0 12px;
+    }
+    .splash-copy {
+      margin: 0;
+      font-size: 15px;
+      line-height: 1.75;
+      color: rgba(255,255,255,0.84);
+    }
+    .splash-bar {
+      width: 220px;
+      height: 4px;
+      margin: 26px auto 0;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.20);
+      overflow: hidden;
+    }
+    .splash-bar::after {
+      content: "";
+      display: block;
+      height: 100%;
+      width: 38%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(255,255,255,0.45), #f7d9a9, rgba(255,255,255,0.45));
+      animation: loadSweep 1.4s ease-in-out infinite;
+    }
+    .page {
+      width: min(1520px, calc(100vw - 28px));
+      margin: 14px auto 44px;
+      display: grid;
+      gap: 18px;
+      position: relative;
+      z-index: 1;
+      animation: fadeRise 800ms ease;
+    }
+    .hero,
+    .section,
+    .panel {
+      background: var(--pku-white);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(16px);
+    }
+    .hero {
+      position: relative;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(360px, 0.85fr);
+      gap: 20px;
+      padding: 28px;
+    }
+    .hero::after {
+      content: "";
+      position: absolute;
+      inset: auto -14% -30% 40%;
+      height: 280px;
+      background: radial-gradient(circle, rgba(139,0,18,0.22), transparent 68%);
+      pointer-events: none;
+    }
+    .hero-brand {
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      margin-bottom: 18px;
+    }
+    .hero-brand img.icon {
+      width: 72px;
+      height: 72px;
+      object-fit: contain;
+    }
+    .hero-brand img.wordmark {
+      width: min(330px, 52vw);
+      max-width: 100%;
+      height: auto;
+      object-fit: contain;
+    }
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 14px;
+      border-radius: 999px;
+      background: rgba(139,0,18,0.06);
+      color: var(--muted);
+      border: 1px solid rgba(139,0,18,0.08);
+      font-size: 12px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .hero h1 {
+      margin: 16px 0 12px;
+      font-family: var(--serif);
+      font-size: clamp(34px, 6vw, 74px);
+      line-height: 0.95;
+      letter-spacing: -0.05em;
+      max-width: 10ch;
+    }
+    .hero-copy {
+      margin: 0;
+      max-width: 56ch;
+      line-height: 1.8;
+      color: var(--muted);
+      font-size: 15px;
+    }
+    .hero-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 20px;
+    }
+    .metric {
+      min-height: 118px;
+      background: rgba(255,255,255,0.70);
+      border: 1px solid rgba(40,24,24,0.08);
+      border-radius: 18px;
+      padding: 16px;
+      display: grid;
+      align-content: space-between;
+    }
+    .metric-value {
+      font-family: var(--serif);
+      font-size: clamp(24px, 4vw, 40px);
+      line-height: 1;
+    }
+    .metric-label {
+      font-size: 12px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .hero-side {
+      display: grid;
+      gap: 12px;
+      align-content: start;
+    }
+    .hero-card {
+      background: rgba(255,255,255,0.82);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 18px;
+    }
+    .mini-label {
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .signature {
+      margin-top: 10px;
+      font-family: var(--serif);
+      font-size: 28px;
+      line-height: 1.12;
+    }
+    .note,
+    .hint,
+    .section-desc {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 14px;
+    }
+    .phase-row {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 12px;
+    }
+    .phase {
+      border-radius: 18px;
+      padding: 16px;
+      background: rgba(255,255,255,0.62);
+      border: 1px solid rgba(40,24,24,0.08);
+    }
+    .phase-step {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .phase-title {
+      font-family: var(--serif);
+      font-size: 24px;
+      line-height: 1.02;
+      margin-bottom: 8px;
+    }
+    .phase p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.55;
+      font-size: 13px;
+    }
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.15fr) minmax(340px, 0.85fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .column { display: grid; gap: 18px; }
+    .section,
+    .panel { padding: 24px; }
+    .section-head,
+    .panel-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 14px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+    .section-title,
+    .panel-title {
+      margin: 0;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      color: var(--muted);
+    }
+    .section-heading {
+      margin: 8px 0 0;
+      font-family: var(--serif);
+      font-size: clamp(24px, 3vw, 36px);
+      line-height: 1.04;
+      letter-spacing: -0.03em;
+    }
+    .pill-row,
+    .button-row,
+    .term-list {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 10px 14px;
+      border-radius: 999px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(40,24,24,0.08);
+      font-size: 13px;
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--warn);
+      flex: 0 0 auto;
+    }
+    .dot.ok { background: var(--ok); }
+    .dot.err { background: var(--danger); }
+    .button {
+      appearance: none;
+      border: none;
+      border-radius: 999px;
+      padding: 13px 18px;
+      font: inherit;
+      cursor: pointer;
+      transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+    }
+    .button:hover { transform: translateY(-1px); }
+    .button.primary {
+      background: linear-gradient(135deg, var(--pku-red) 0%, #aa1326 100%);
+      color: white;
+      box-shadow: 0 1px 2px rgba(40,24,24,0.16);
+    }
+    .button.secondary {
+      background: rgba(255,255,255,0.78);
+      color: var(--pku-ink);
+      border: 1px solid rgba(40,24,24,0.10);
+    }
+    .button.warm {
+      background: linear-gradient(135deg, #e7cb9b 0%, #cb9953 100%);
+      color: #4c2e10;
+    }
+    .button.ghost {
+      background: rgba(139,0,18,0.08);
+      color: var(--pku-red);
+    }
+    .button.danger {
+      background: rgba(157,48,40,0.12);
+      color: var(--danger);
+    }
+    .button[disabled] {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+    .field-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+    }
+    .field-grid.compact {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+    .field,
+    .card-lite {
+      background: rgba(255,255,255,0.86);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 16px;
+    }
+    .field-label {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    input[type="text"],
+    input[type="number"],
+    textarea {
+      width: 100%;
+      background: rgba(255,255,255,0.90);
+      border: 1px solid rgba(40,24,24,0.10);
+      border-radius: 16px;
+      padding: 14px 15px;
+      font: inherit;
+      color: var(--pku-ink);
+      transition: border-color 150ms ease, box-shadow 150ms ease;
+    }
+    input:focus,
+    textarea:focus {
+      outline: none;
+      border-color: rgba(139,0,18,0.35);
+      box-shadow: 0 0 0 4px rgba(139,0,18,0.08);
+    }
+    textarea {
+      min-height: 180px;
+      resize: vertical;
+      line-height: 1.55;
+    }
+    .mono,
+    textarea.mono { font-family: var(--mono); }
+    .checklist {
+      display: grid;
+      gap: 10px;
+    }
+    .check {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+      font-size: 14px;
+    }
+    .progress-shell {
+      padding: 18px;
+      border-radius: 24px;
+      background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(246,236,227,0.96));
+      border: 1px solid rgba(40,24,24,0.08);
+    }
+    .progress-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+    .progress-track {
+      height: 16px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(40,24,24,0.08);
+    }
+    .progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, var(--pku-red) 0%, #b22a28 52%, #d7b070 100%);
+      position: relative;
+    }
+    .progress-fill::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.48), transparent);
+      animation: shimmer 2.1s linear infinite;
+    }
+    .table-wrap {
+      border: 1px solid rgba(40,24,24,0.08);
+      border-radius: 18px;
+      overflow: auto;
+      max-height: 360px;
+      background: rgba(255,255,255,0.82);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    th, td {
+      text-align: left;
+      padding: 12px 10px;
+      border-bottom: 1px solid rgba(40,24,24,0.08);
+      vertical-align: top;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: rgba(251,247,242,0.96);
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+    }
+    pre.console {
+      margin: 0;
+      min-height: 320px;
+      max-height: 400px;
+      overflow: auto;
+      border-radius: 18px;
+      padding: 18px;
+      background: #130d0f;
+      color: #efe7df;
+      border: 1px solid rgba(255,255,255,0.06);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .status-banner {
+      border-radius: 18px;
+      padding: 14px 16px;
+      background: rgba(139,0,18,0.06);
+      border: 1px solid rgba(139,0,18,0.10);
+      line-height: 1.6;
+      font-size: 14px;
+    }
+    .status-banner.warn {
+      background: rgba(183,139,74,0.10);
+      border-color: rgba(183,139,74,0.18);
+    }
+    .term {
+      display: inline-flex;
+      align-items: center;
+      padding: 8px 12px;
+      border-radius: 999px;
+      background: rgba(183,139,74,0.12);
+      border: 1px solid rgba(183,139,74,0.16);
+      color: #6a4717;
+      font-size: 12px;
+    }
+    .review-list {
+      display: grid;
+      gap: 12px;
+    }
+    .review-item {
+      border-radius: 16px;
+      padding: 14px;
+      background: rgba(255,255,255,0.72);
+      border: 1px solid rgba(40,24,24,0.08);
+    }
+    .review-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      align-items: flex-start;
+      margin-bottom: 8px;
+      flex-wrap: wrap;
+    }
+    .review-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 6px 10px;
+      font-size: 12px;
+      background: rgba(255,255,255,0.86);
+      border: 1px solid rgba(40,24,24,0.08);
+    }
+    .review-copy {
+      font-size: 13px;
+      line-height: 1.65;
+      color: var(--muted);
+    }
+    .review-copy strong {
+      color: var(--pku-ink);
+      display: block;
+      margin-bottom: 4px;
+    }
+    .output-path {
+      padding: 12px 14px;
+      border-radius: 16px;
+      background: rgba(255,255,255,0.80);
+      border: 1px dashed rgba(40,24,24,0.12);
+      font-family: var(--mono);
+      font-size: 12px;
+      line-height: 1.55;
+      word-break: break-word;
+    }
+    .ports-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+    .port-card {
+      border-radius: 18px;
+      border: 1px solid rgba(40,24,24,0.08);
+      background: rgba(255,255,255,0.72);
+      padding: 14px;
+    }
+    .footer-note {
+      text-align: center;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+    .toast {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 40;
+      padding: 13px 15px;
+      border-radius: 16px;
+      background: rgba(17, 13, 15, 0.94);
+      color: white;
+      box-shadow: var(--shadow);
+      opacity: 0;
+      transform: translateY(12px);
+      transition: opacity 150ms ease, transform 150ms ease;
+      pointer-events: none;
+      max-width: min(540px, calc(100vw - 40px));
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .toast.show {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    @keyframes fadeRise {
+      from { opacity: 0; transform: translateY(12px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes shimmer {
+      0% { transform: translateX(-100%); }
+      100% { transform: translateX(160%); }
+    }
+    @keyframes loadSweep {
+      0% { transform: translateX(-150%); }
+      100% { transform: translateX(400%); }
+    }
+    @media (max-width: 1180px) {
+      .hero,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+    @media (max-width: 860px) {
+      .page {
+        width: calc(100vw - 16px);
+        margin: 8px auto 30px;
+        gap: 12px;
+      }
+      .hero,
+      .section,
+      .panel {
+        padding: 18px;
+        border-radius: 22px;
+      }
+      .hero-grid,
+      .phase-row,
+      .field-grid,
+      .field-grid.compact,
+      .ports-grid {
+        grid-template-columns: 1fr;
+      }
+      .button-row .button { width: 100%; }
+    }
+
+    /* Workspace-first revision: show the tool, not a poster. */
+    .splash { display: none; }
+    .page {
+      width: min(2420px, calc(100vw - 32px));
+      margin: 12px auto 32px;
+      gap: 16px;
+      animation: none;
+    }
+    .hero,
+    .section,
+    .panel {
+      border-radius: 8px;
+      box-shadow: 0 10px 28px rgba(26, 20, 20, 0.07);
+      backdrop-filter: none;
+    }
+    .hero {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(620px, auto);
+      align-items: center;
+      padding: 14px 18px;
+      gap: 18px;
+    }
+    .hero::after,
+    .hero-copy,
+    .hero-grid,
+    .hero-side,
+    .eyebrow {
+      display: none;
+    }
+    .hero-brand {
+      margin: 0;
+      gap: 12px;
+    }
+    .hero-main {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+    .hero-status {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+    }
+    .hero-status .output-path {
+      max-width: 620px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      padding: 8px 10px;
+    }
+    .hero-brand img.icon {
+      width: 36px;
+      height: 36px;
+    }
+    .hero-brand img.wordmark {
+      width: 180px;
+    }
+    .hero h1 {
+      margin: 0;
+      font-family: var(--sans);
+      font-size: 20px;
+      line-height: 1.25;
+      letter-spacing: 0;
+      max-width: none;
+      white-space: nowrap;
+    }
+    .layout {
+      grid-template-columns: minmax(0, 1fr) 580px;
+      gap: 16px;
+      align-items: start;
+    }
+    .column { gap: 16px; }
+    .primary-workflow { order: 1; }
+    .agent-workflow { order: 2; }
+    .secondary-workflow { order: 2; }
+    .secondary-review { order: 4; }
+    .section,
+    .panel {
+      padding: 18px;
+    }
+    .section-head,
+    .panel-head {
+      margin-bottom: 12px;
+      gap: 10px;
+    }
+    .section-title,
+    .panel-title,
+    .field-label,
+    .metric-label {
+      letter-spacing: 0;
+      text-transform: none;
+    }
+    .section-heading {
+      margin-top: 4px;
+      font-family: var(--sans);
+      font-size: 22px;
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+    .field,
+    .card-lite,
+    .metric {
+      border-radius: 8px;
+      padding: 14px;
+    }
+    textarea {
+      min-height: 142px;
+      border-radius: 8px;
+    }
+    input[type="text"],
+    input[type="number"] {
+      border-radius: 8px;
+      padding: 10px 12px;
+    }
+    .button {
+      border-radius: 8px;
+      padding: 11px 14px;
+      font-weight: 700;
+    }
+    .button.primary { min-width: 150px; }
+    .quick-actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid rgba(40,24,24,0.08);
+    }
+    details.section,
+    details.secondary-panel {
+      display: block;
+    }
+    details.section > summary,
+    details.secondary-panel > summary {
+      cursor: pointer;
+      list-style: none;
+      font-weight: 800;
+      color: var(--pku-ink);
+      padding: 4px 0;
+    }
+    details.section > summary::-webkit-details-marker,
+    details.secondary-panel > summary::-webkit-details-marker {
+      display: none;
+    }
+    details.section > summary::after,
+    details.secondary-panel > summary::after {
+      content: "展开";
+      float: right;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+    details[open] > summary::after {
+      content: "收起";
+    }
+    .secondary-body,
+    .secondary-panel-body {
+      margin-top: 12px;
+    }
+    .secondary-diagnostics {
+      margin-top: 14px;
+    }
+    .diagnostics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 12px;
+    }
+    .progress-shell,
+    .console,
+    .table-wrap,
+    .pill {
+      border-radius: 8px;
+    }
+    .console { max-height: 180px; }
+    .pill { padding: 8px 10px; }
+    .page,
+    .layout,
+    .column,
+    .section,
+    .panel,
+    .field,
+    .table-wrap,
+    .progress-shell {
+      min-width: 0;
+    }
+    .field.output-field .button-row #analyzeBtn {
+      display: none;
+    }
+    .table-wrap {
+      max-width: 100%;
+    }
+    table {
+      min-width: 560px;
+    }
+    .panel .field-grid.compact {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
+      opacity: 0.86;
+    }
+    .panel .field-grid.compact .field {
+      padding: 10px;
+    }
+    .panel .field-grid.compact input {
+      padding: 8px 10px;
+      min-height: 38px;
+    }
+    .panel .field-grid.compact + .field {
+      padding: 10px 12px;
+    }
+    .panel .secondary-panel {
+      margin-top: 12px;
+      border: 1px solid rgba(40,24,24,0.08);
+      border-radius: 8px;
+      padding: 10px 12px;
+      background: rgba(255,255,255,0.58);
+    }
+    .panel > .field:has(#warmupBtn) {
+      padding: 0;
+      border: none;
+      background: transparent;
+    }
+    .monitor-actions {
+      justify-content: flex-end;
+    }
+    .monitor-actions #warmupBtn,
+    .monitor-actions #downloadBtn {
+      display: none;
+    }
+    #stopBtn {
+      opacity: 0.72;
+    }
+    #inputText {
+      min-height: 250px;
+      font-size: 15px;
+    }
+    #outputDir {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .primary-workflow > .field-grid {
+      grid-template-columns: minmax(0, 1.35fr) minmax(280px, 0.85fr);
+      align-items: stretch;
+    }
+    .primary-workflow > .field-grid > .field {
+      display: flex;
+      flex-direction: column;
+    }
+    .primary-workflow #inputText {
+      flex: 1;
+    }
+    .primary-workflow .quick-actions {
+      margin-top: auto;
+    }
+    .layout > .column:first-child {
+      grid-template-columns: minmax(560px, 0.92fr) minmax(760px, 1.08fr);
+    }
+    .layout > .column:first-child .primary-workflow,
+    .layout > .column:first-child .agent-workflow {
+      min-height: 520px;
+    }
+    .layout > .column:first-child .secondary-review {
+      min-height: 72px;
+    }
+    .layout > .column:first-child .secondary-review {
+      grid-column: 1 / -1;
+    }
+    .agent-workflow {
+      position: relative;
+      overflow: hidden;
+    }
+    .agent-workflow > summary {
+      display: none;
+    }
+    .agent-workflow .secondary-body {
+      margin-top: 0;
+    }
+    .agent-workflow .field-grid,
+    .agent-workflow .field-grid[style],
+    .agent-workflow .field[style] {
+      margin-top: 12px !important;
+    }
+    .agent-workflow .field-grid {
+      grid-template-columns: 1fr;
+    }
+    .agent-workflow .button-row .button {
+      flex: 1 1 auto;
+    }
+    .agent-workflow textarea {
+      min-height: 132px;
+    }
+    .agent-workflow #researchTermsEditor {
+      min-height: 116px;
+    }
+    .agent-workflow .table-wrap {
+      max-height: 210px !important;
+    }
+    .agent-workflow .agent-advanced {
+      display: none;
+    }
+    .agent-chat {
+      display: grid;
+      gap: 12px;
+    }
+    .agent-thread {
+      min-height: 330px;
+      max-height: 460px;
+      overflow: auto;
+      padding: 14px;
+      border: 1px solid rgba(92, 58, 46, 0.13);
+      border-radius: 10px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.78), rgba(255,250,244,0.66)),
+        radial-gradient(circle at 18% 0%, rgba(31,111,93,0.06), transparent 32%);
+    }
+    .agent-message {
+      width: min(82%, 720px);
+      margin-bottom: 12px;
+      padding: 12px 14px;
+      border-radius: 14px;
+      line-height: 1.65;
+      color: var(--pku-ink);
+      border: 1px solid rgba(92, 58, 46, 0.12);
+      background: rgba(255,255,255,0.78);
+    }
+    .agent-message.user {
+      margin-left: auto;
+      background: rgba(139, 0, 18, 0.075);
+      border-color: rgba(139, 0, 18, 0.16);
+    }
+    .agent-message.agent {
+      margin-right: auto;
+    }
+    .agent-message strong {
+      display: block;
+      margin-bottom: 4px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .agent-composer {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: end;
+    }
+    .agent-composer textarea {
+      min-height: 96px;
+    }
+    .agent-toolbar {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+    .agent-keyword-panel {
+      display: grid;
+      gap: 12px;
+    }
+    .panel {
+      position: sticky;
+      top: 14px;
+    }
+    .panel .progress-shell {
+      min-height: 150px;
+    }
+    .panel > .field:has(#resultsPathText) {
+      min-height: 118px;
+    }
+    @media (max-width: 980px) {
+      .page {
+        width: calc(100vw - 16px);
+        margin: 8px auto 30px;
+        gap: 12px;
+      }
+      .hero,
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .hero h1 { white-space: normal; }
+      .field-grid,
+      .field-grid.compact,
+      .ports-grid {
+        grid-template-columns: 1fr;
+      }
+      .layout > .column:last-child {
+        order: 2;
+      }
+      .layout > .column:first-child {
+        grid-template-columns: 1fr;
+      }
+      .primary-workflow > .field-grid {
+        grid-template-columns: 1fr;
+      }
+      .secondary-workflow { order: 5; }
+      .secondary-review { order: 6; }
+      .agent-workflow > summary {
+        display: block;
+      }
+      .hero {
+        grid-template-columns: 1fr;
+      }
+      .hero-main {
+        align-items: flex-start;
+        gap: 10px;
+        flex-wrap: wrap;
+      }
+      .hero-main .hero-brand {
+        flex: 0 0 auto;
+      }
+      .hero-main h1 {
+        flex: 1 1 100%;
+        min-width: 0;
+      }
+      .hero-status {
+        justify-content: flex-start;
+        flex-wrap: wrap;
+      }
+      .hero-status .output-path {
+        max-width: 100%;
+        width: 100%;
+      }
+      .diagnostics-grid {
+        grid-template-columns: 1fr;
+      }
+      .hero-brand img.wordmark {
+        width: 138px;
+      }
+      .hero h1 {
+        font-size: 16px;
+        line-height: 1.18;
+        white-space: normal;
+      }
+      .section,
+      .panel {
+        padding: 12px;
+      }
+      .section-heading {
+        font-size: 20px;
+      }
+      .panel .field-grid.compact {
+        grid-template-columns: 1fr;
+      }
+      .panel > .field:has(#warmupBtn) {
+        position: static;
+      }
+      .panel {
+        position: static;
+      }
+      #inputText {
+        min-height: 150px;
+      }
+      .quick-actions .button {
+        width: 100%;
+      }
+    }
+
+    /* Generated material layer: scholarly instrument, not a flat admin page. */
+    :root {
+      --surface-solid: rgba(255, 252, 247, 0.88);
+      --surface-glass: rgba(255, 252, 247, 0.76);
+      --surface-strong: rgba(255, 255, 255, 0.92);
+      --ink-soft: rgba(26, 20, 20, 0.72);
+      --instrument-line: rgba(114, 74, 54, 0.14);
+      --instrument-line-strong: rgba(139, 0, 18, 0.18);
+      --focus-ring: rgba(139, 0, 18, 0.14);
+      --motion-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    body {
+      background:
+        radial-gradient(circle at 16% 8%, rgba(139, 0, 18, 0.18), transparent 24%),
+        radial-gradient(circle at 86% 18%, rgba(26, 102, 88, 0.13), transparent 26%),
+        radial-gradient(circle at 46% 92%, rgba(183, 139, 74, 0.18), transparent 28%),
+        linear-gradient(135deg, #f8efe8 0%, #fffaf4 38%, #f1e7df 100%);
+    }
+    body::before {
+      background-image:
+        linear-gradient(rgba(139, 0, 18, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139, 0, 18, 0.035) 1px, transparent 1px),
+        radial-gradient(circle, rgba(114, 74, 54, 0.10) 0 1px, transparent 1.5px);
+      background-size: 56px 56px, 56px 56px, 18px 18px;
+      opacity: 0.72;
+      mask-image: linear-gradient(180deg, rgba(0,0,0,0.62), rgba(0,0,0,0.22) 72%, transparent);
+    }
+    body::after {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+      background:
+        linear-gradient(120deg, transparent 0 42%, rgba(255,255,255,0.34) 48%, transparent 54%),
+        radial-gradient(circle at 50% 35%, transparent 0 34%, rgba(74, 42, 32, 0.045) 70%, transparent);
+      mix-blend-mode: soft-light;
+    }
+    .ambient-canvas,
+    .paper-atmosphere {
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .ambient-canvas {
+      opacity: 0.22;
+    }
+    .paper-atmosphere {
+      overflow: hidden;
+    }
+    .paper-atmosphere::before,
+    .paper-atmosphere::after {
+      content: "";
+      position: absolute;
+      border: 1px solid rgba(139, 0, 18, 0.08);
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.50), rgba(255,255,255,0.08)),
+        repeating-linear-gradient(180deg, transparent 0 18px, rgba(139, 0, 18, 0.035) 19px 20px);
+      box-shadow: 0 24px 80px rgba(24, 24, 24, 0.055);
+      transform: rotate(-8deg);
+    }
+    .paper-atmosphere::before {
+      width: 280px;
+      height: 360px;
+      left: 7vw;
+      top: 45vh;
+      opacity: 0.16;
+    }
+    .paper-atmosphere::after {
+      width: 220px;
+      height: 300px;
+      right: 9vw;
+      top: 16vh;
+      transform: rotate(9deg);
+      opacity: 0.12;
+    }
+    .page {
+      position: relative;
+      z-index: 1;
+    }
+    .hero,
+    .section,
+    .panel {
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.76), rgba(255,250,244,0.88)),
+        radial-gradient(circle at 20% 0%, rgba(139,0,18,0.035), transparent 34%);
+      border: 1px solid rgba(92, 58, 46, 0.12);
+      box-shadow: 0 20px 70px rgba(52, 35, 29, 0.10), inset 0 1px 0 rgba(255,255,255,0.72);
+    }
+    .hero {
+      overflow: hidden;
+    }
+    .hero::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(90deg, rgba(139,0,18,0.08), transparent 18%),
+        linear-gradient(180deg, rgba(255,255,255,0.58), transparent);
+      opacity: 0.9;
+    }
+    .hero > * {
+      position: relative;
+      z-index: 1;
+    }
+    .hero-brand {
+      position: relative;
+      min-width: 180px;
+      min-height: 46px;
+      align-items: center;
+    }
+    .hero-brand::before {
+      content: "北大";
+      width: 42px;
+      height: 42px;
+      display: none;
+      place-items: center;
+      border-radius: 50%;
+      color: var(--pku-red);
+      border: 1px solid rgba(139,0,18,0.36);
+      background: radial-gradient(circle, rgba(255,255,255,0.95), rgba(139,0,18,0.08));
+      font-family: var(--serif);
+      font-weight: 800;
+      letter-spacing: -0.08em;
+      flex: 0 0 auto;
+    }
+    .brand-fallback {
+      display: none;
+      line-height: 1.05;
+    }
+    .brand-fallback strong {
+      display: block;
+      color: var(--pku-red);
+      font-family: var(--serif);
+      font-size: 22px;
+      letter-spacing: -0.08em;
+    }
+    .brand-fallback span {
+      display: block;
+      margin-top: 3px;
+      color: rgba(26, 20, 20, 0.68);
+      font-size: 10px;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+    }
+    .hero-brand img.wordmark {
+      width: 230px;
+      filter: saturate(1.08) contrast(1.04);
+    }
+    .hero-brand img.wordmark.logo-error {
+      display: none;
+    }
+    .hero-brand:has(img.wordmark.logo-error)::before {
+      display: inline-grid;
+    }
+    .hero-brand img.wordmark.logo-error + .brand-fallback {
+      display: block;
+    }
+    .hero h1 {
+      font-size: 22px;
+      letter-spacing: -0.02em;
+    }
+    .field,
+    .progress-shell,
+    .table-wrap,
+    details.secondary-panel {
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,250,244,0.72)),
+        radial-gradient(circle at 0% 0%, rgba(183,139,74,0.08), transparent 30%);
+      border-color: rgba(92, 58, 46, 0.13);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.76);
+    }
+    textarea,
+    input[type="text"],
+    input[type="number"] {
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.94), rgba(255,252,248,0.88)),
+        repeating-linear-gradient(180deg, transparent 0 21px, rgba(139,0,18,0.025) 22px 23px);
+      border-color: rgba(92, 58, 46, 0.14);
+    }
+    textarea:focus,
+    input:focus {
+      border-color: rgba(139, 0, 18, 0.34);
+      box-shadow: 0 0 0 4px var(--focus-ring), 0 16px 50px rgba(139, 0, 18, 0.08);
+    }
+    .button {
+      transition: transform 160ms var(--motion-ease), box-shadow 160ms var(--motion-ease), background 160ms var(--motion-ease);
+    }
+    .button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(24, 24, 24, 0.065);
+    }
+    .button:active {
+      transform: translateY(0) scale(0.985);
+    }
+    .button.primary {
+      background:
+        linear-gradient(135deg, #8b0012 0%, #b20f24 46%, #7b0010 100%);
+      box-shadow: 0 8px 18px rgba(24, 24, 24, 0.08);
+    }
+    .button.warm {
+      background: linear-gradient(135deg, #f0d29d 0%, #c69143 100%);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.34);
+    }
+    .pill {
+      background: rgba(255,255,255,0.70);
+      border-color: rgba(92, 58, 46, 0.12);
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.62);
+    }
+    .progress-track {
+      height: 18px;
+      background:
+        linear-gradient(180deg, rgba(67, 43, 34, 0.10), rgba(255,255,255,0.26));
+      border: 1px solid rgba(92, 58, 46, 0.10);
+    }
+    .progress-fill {
+      background:
+        linear-gradient(90deg, #8b0012 0%, #c74832 48%, #d8a84f 100%);
+    }
+    .progress-fill::after {
+      animation: shimmer 1.55s linear infinite;
+    }
+    .section-heading,
+    .panel-title,
+    details.section > summary,
+    details.secondary-panel > summary {
+      letter-spacing: -0.02em;
+    }
+    .secondary-workflow,
+    .secondary-review {
+      position: relative;
+      overflow: hidden;
+    }
+    .secondary-workflow::before,
+    .secondary-review::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background:
+        linear-gradient(110deg, rgba(139,0,18,0.06), transparent 32%),
+        radial-gradient(circle at 94% 18%, rgba(31,111,93,0.10), transparent 22%);
+      opacity: 0.9;
+    }
+    .secondary-workflow > *,
+    .secondary-review > * {
+      position: relative;
+      z-index: 1;
+    }
+    .toast {
+      border: 1px solid rgba(255,255,255,0.12);
+      backdrop-filter: blur(14px);
+    }
+    /* Zoom-safe guardrails: browser zoom reduces CSS viewport width, so fixed
+       dashboard columns must collapse before cards start overlapping. */
+    .page,
+    .hero,
+    .layout,
+    .column,
+    .section,
+    .panel,
+    .field,
+    .field-grid,
+    .agent-workflow,
+    .primary-workflow,
+    .secondary-workflow,
+    .secondary-review,
+    .agent-thread,
+    .agent-composer,
+    .table-wrap,
+    .progress-shell,
+    .console {
+      min-width: 0;
+    }
+    .section-heading,
+    .section-title,
+    .panel-title,
+    .section-desc,
+    .note,
+    .pill,
+    .button,
+    .status-banner,
+    .agent-message,
+    .output-path,
+    td,
+    th {
+      overflow-wrap: anywhere;
+      word-break: normal;
+    }
+    .layout > .column:first-child {
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
+    }
+    .hero-status,
+    .pill-row,
+    .button-row,
+    .agent-toolbar {
+      flex-wrap: wrap;
+    }
+    .button {
+      max-width: 100%;
+      white-space: nowrap;
+    }
+    .agent-composer {
+      grid-template-columns: minmax(0, 1fr) auto;
+    }
+    @media (max-width: 1500px) {
+      .layout {
+        grid-template-columns: 1fr;
+      }
+      .layout > .column:first-child {
+        grid-template-columns: repeat(auto-fit, minmax(min(100%, 500px), 1fr));
+      }
+      .panel {
+        position: static;
+      }
+      .hero h1 {
+        white-space: normal;
+      }
+    }
+    @media (max-width: 1180px) {
+      .layout > .column:first-child,
+      .primary-workflow > .field-grid,
+      .field-grid,
+      .field-grid.compact,
+      .agent-composer {
+        grid-template-columns: 1fr !important;
+      }
+      .agent-message {
+        width: 100%;
+      }
+      .button {
+        white-space: normal;
+      }
+      .agent-toolbar,
+      .button-row,
+      .pill-row {
+        justify-content: flex-start;
+      }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+        scroll-behavior: auto !important;
+      }
+      .ambient-canvas {
+        display: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <canvas class="ambient-canvas" id="ambientCanvas" aria-hidden="true"></canvas>
+  <div class="paper-atmosphere" aria-hidden="true"></div>
+  <div class="splash" id="splashScreen">
+    <div class="splash-inner">
+      <img class="splash-logo" src="/assets/pku-icon.png" alt="Peking University">
+      <h1 class="splash-title">北大文献智采工作台</h1>
+      <p class="splash-copy">
+        Peking University Literature Console
+        <br>
+        先定义任务，再确认关键词，再检索与下载。
+      </p>
+      <div class="splash-bar"></div>
+    </div>
+  </div>
+
+  <div class="page">
+    <section class="hero">
+      <div class="hero-main">
+        <div class="hero-brand">
+          <img class="wordmark" src="/assets/pku-wordmark.png" alt="Peking University" onerror="this.classList.add('logo-error')">
+          <div class="brand-fallback" aria-hidden="true">
+            <strong>北京大学</strong>
+            <span>Peking University</span>
+          </div>
+        </div>
+        <h1>北大文献智采工作台</h1>
+      </div>
+      <div class="hero-status">
+        <div class="pill"><span class="dot" id="statusDot"></span><span id="runStatusText">准备就绪</span></div>
+        <div class="pill"><span class="dot ok"></span><span id="publisherSummary">等待 DOI 队列</span></div>
+        <div class="output-path" id="runDirText">尚未建立归档</div>
+      </div>
+      <span id="heroTaskName" hidden>未命名任务</span>
+      <span id="heroTaskHint" hidden>任务名将直接进入归档目录命名。</span>
+      <span id="metricRows" hidden>0</span>
+      <span id="metricPublishers" hidden>0</span>
+      <span id="metricDownloaded" hidden>0</span>
+    </section>
+
+    <div class="layout">
+      <div class="column">
+        <details class="section secondary-workflow agent-workflow" open>
+          <summary>选题研判</summary>
+          <div class="secondary-body">
+          <div class="section-head">
+            <div>
+              <div class="section-title">Research Intelligence</div>
+              <h2 class="section-heading">把研究意图打磨成可检索关键词</h2>
+              <p class="section-desc">大模型先理解你的选题边界；你确认关键词后，系统才会检索 DOI 候选。</p>
+            </div>
+            <div class="pill-row">
+              <div class="pill"><span class="dot ok"></span><span id="researchStatusText">等待研究简报</span></div>
+              <div class="pill"><span class="dot ok"></span><span id="researchRunIdText">尚未检索</span></div>
+            </div>
+          </div>
+
+          <div class="agent-chat">
+            <div class="agent-thread" id="agentThread">
+              <div class="agent-message agent">
+                <strong>选题研判助手</strong>
+                告诉我主题。我会提炼关键词；闲聊不进简报。
+              </div>
+            </div>
+            <div class="agent-composer">
+              <textarea id="agentComposerText" placeholder="例如：我想找近五年 polyurethane waterproof latent curing coating 相关论文，偏应用型、材料性能和可下载 DOI。"></textarea>
+              <div class="agent-toolbar">
+                <button class="button secondary" id="agentAddTurnBtn" type="button">发送补充</button>
+                <button class="button primary" id="agentDraftFromChatBtn" type="button">生成关键词草案</button>
+                <button class="button ghost" id="agentClearBtn" type="button">清空本轮</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="field-grid agent-advanced">
+            <div class="field">
+              <label class="field-label" for="taskName">研究任务名</label>
+              <input id="taskName" type="text" placeholder="例如：MOF 膜分离 / 聚氨酯防水潜伏固化涂层">
+              <p class="note">用于命名检索任务、输出文件夹和后续归档记录。</p>
+            </div>
+            <div class="field">
+              <label class="field-label" for="researchLimit">全量采集安全阈值</label>
+              <input id="researchLimit" type="number" step="1" min="1">
+              <p class="note">系统会分页采集；这里不是抽样数量，只是防止超宽泛主题一次抓取过大。</p>
+              <div class="checklist" style="margin-top:12px;">
+                <label class="check"><input id="researchCrossref" type="checkbox">Crossref</label>
+                <label class="check"><input id="researchOpenalex" type="checkbox">OpenAlex</label>
+                <label class="check"><input id="researchLocalManual" type="checkbox">Local Manual</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="field agent-advanced" style="margin-top:14px;">
+            <label class="field-label" for="researchQueryText">检索意图简报</label>
+            <textarea id="researchQueryText" placeholder="例如：我想找近五年 polyurethane waterproof latent curing coating 相关论文，偏应用型、材料性能和可下载 DOI。"></textarea>
+          </div>
+
+          <div class="field" style="margin-top:14px;">
+            <div class="panel-head">
+              <div>
+                <h3 class="panel-title">关键词方案</h3>
+                <p class="note">继续对话可以反复修订；只有你确认后，系统才会检索 DOI。</p>
+              </div>
+              <div class="pill"><span class="dot" id="keywordConfirmDot"></span><span id="keywordConfirmText">关键词未确认</span></div>
+            </div>
+            <div class="status-banner warn" id="researchSummaryText">描述研究方向后，生成可确认的关键词方案。</div>
+            <div class="term-list" id="researchTerms" style="margin-top:12px;"></div>
+            <label class="field-label" for="researchTermsEditor" style="margin-top:12px;">已确认关键词</label>
+            <textarea id="researchTermsEditor" class="mono" placeholder="每行一个关键词。你确认后，系统才允许搜索。"></textarea>
+            <div class="button-row" style="margin-top:16px;">
+              <button class="button secondary" id="researchDraftBtn">重新生成草案</button>
+              <button class="button warm" id="researchConfirmBtn">确认关键词</button>
+              <button class="button primary" id="researchSearchBtn">检索 DOI 候选</button>
+              <button class="button ghost" id="researchUseBtn">导入下载队列</button>
+            </div>
+          </div>
+
+          <div class="field-grid" style="margin-top:14px;">
+            <div class="field">
+              <div class="panel-head">
+                <div>
+                  <h3 class="panel-title">来源概览</h3>
+                  <p class="note">确认关键词后，显示各来源分页采集与 Review Agent 清洗后的数量。</p>
+                </div>
+              </div>
+              <div class="table-wrap" style="max-height:280px;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Provider</th>
+                      <th>Returned</th>
+                      <th>DOI</th>
+                      <th>Candidates</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody id="researchProviderBody"></tbody>
+                </table>
+              </div>
+            </div>
+            <div class="field">
+              <div class="panel-head">
+                <div>
+                  <h3 class="panel-title">候选文献</h3>
+                  <p class="note">全量候选已保存；页面仅预览前 300 条，导入下载队列使用完整清洗结果。</p>
+                </div>
+              </div>
+              <div class="table-wrap" style="max-height:280px;">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Provider</th>
+                      <th>Year</th>
+                      <th>DOI</th>
+                      <th>Title</th>
+                    </tr>
+                  </thead>
+                  <tbody id="researchRecordsBody"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+          </div>
+        </details>
+
+        <details class="section secondary-review">
+          <summary>Review Agent</summary>
+          <div class="secondary-body">
+          <div class="section-head">
+            <div>
+              <div class="section-title">Review Agent</div>
+              <h2 class="section-heading">清洗重复 DOI 与噪声记录</h2>
+              <p class="section-desc">先做全量去重、去噪，再抽检 DOI 与题名是否匹配。</p>
+            </div>
+            <div class="pill-row">
+              <div class="pill"><span class="dot ok"></span><span id="titleReviewStatusText">尚未校验题名</span></div>
+            </div>
+          </div>
+
+          <div class="field">
+            <div class="panel-head">
+              <div>
+                <h3 class="panel-title">清洗与题名抽检</h3>
+                <p class="note" id="titleReviewSummaryText">检索 DOI 候选后，可清理重复 DOI、噪声记录并抽检题名。</p>
+              </div>
+              <button class="button secondary" id="reviewTitlesBtn">运行 Review Agent</button>
+            </div>
+            <div class="review-list" id="titleReviewList"></div>
+          </div>
+          </div>
+        </details>
+
+        <section class="section primary-workflow">
+          <div class="section-head">
+            <div>
+              <div class="section-title">DOI Acquisition</div>
+              <h2 class="section-heading">从 DOI 队列下载 PDF</h2>
+              <p class="section-desc">粘贴 DOI 或 DOI URL，系统会按出版方分组预热浏览器，并把 PDF 归档到本地任务目录。</p>
+            </div>
+            <div class="pill-row">
+              <div class="pill"><span class="dot ok"></span><span id="rowCountText">0 rows</span></div>
+              <div class="pill"><span class="dot ok"></span><span id="previewSummary">等待输入</span></div>
+            </div>
+          </div>
+
+          <div class="field-grid">
+            <div class="field">
+              <label class="field-label" for="inputText">DOI 队列</label>
+              <textarea id="inputText" class="mono" placeholder="10.1016/j.ijadhadh.2021.102871&#10;https://doi.org/10.1039/c6ra19883j"></textarea>
+              <div class="quick-actions">
+                <button class="button secondary" id="quickAnalyzeBtn">解析 DOI</button>
+                <button class="button warm" id="quickWarmupBtn">预热浏览器</button>
+                <button class="button primary" id="quickDownloadBtn">开始下载 PDF</button>
+              </div>
+            </div>
+            <div class="field output-field">
+              <label class="field-label" for="outputDir">归档目录</label>
+              <input id="outputDir" type="text">
+              <div class="checklist" style="margin-top:12px;">
+                <label class="check"><input id="outputDirAuto" type="checkbox">按任务名自动创建归档目录</label>
+              </div>
+              <p class="note">自动命名会按“任务名 + 时间”生成文件夹；手动 DOI 会使用手动批次名。</p>
+              <div class="button-row" style="margin-top:16px;">
+                <button class="button secondary" id="analyzeBtn">解析 DOI</button>
+                <button class="button secondary" id="openOutputBtn">打开归档目录</button>
+                <button class="button secondary" id="openResultsBtn">查看结果表</button>
+              </div>
+            </div>
+          </div>
+
+          <details class="secondary-panel secondary-diagnostics">
+            <summary>下载队列与浏览器端口</summary>
+            <div class="diagnostics-grid">
+              <div class="field">
+                <div class="panel-head">
+                  <div>
+                    <h3 class="panel-title">下载队列</h3>
+                    <p class="note">即将进入下载流程的 DOI 记录。</p>
+                  </div>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>#</th>
+                        <th>Publisher</th>
+                        <th>DOI</th>
+                        <th>URL</th>
+                      </tr>
+                    </thead>
+                    <tbody id="previewBody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <div class="field">
+                <div class="panel-head">
+                  <div>
+                    <h3 class="panel-title">出版方浏览器端口</h3>
+                    <p class="note">用于按出版方复用本地 Chrome 会话。</p>
+                  </div>
+                </div>
+                <div class="ports-grid" id="portInputs"></div>
+                <div class="table-wrap" style="margin-top:14px; max-height:220px;">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Publisher</th>
+                        <th>Port</th>
+                        <th>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody id="portsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </details>
+        </section>
+      </div>
+
+      <div class="column">
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <div class="section-title">Run Observatory</div>
+              <h2 class="section-heading">任务运行状态</h2>
+              <p class="section-desc">查看解析、预热、下载和归档进度；需要时可以停止当前任务。</p>
+            </div>
+          </div>
+
+          <div class="progress-shell">
+            <div class="progress-top">
+              <strong id="progressLabel">等待 DOI 队列</strong>
+              <span class="note" id="progressModeText">空闲</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill" id="progressFill"></div>
+            </div>
+            <div class="hero-grid" style="margin-top:14px;">
+              <div class="metric">
+                <div class="metric-value" id="metricProgressPercent">0%</div>
+                <div class="metric-label">Progress</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value" id="metricRemaining">0</div>
+                <div class="metric-label">Remaining</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value" id="metricExitCode">-</div>
+                <div class="metric-label">Last Exit</div>
+              </div>
+            </div>
+          </div>
+
+          <details class="secondary-panel">
+            <summary>运行参数</summary>
+            <div class="secondary-panel-body">
+          <div class="field-grid compact">
+            <div class="field">
+              <label class="field-label" for="pageSettleSeconds">页面稳定等待</label>
+              <input id="pageSettleSeconds" type="number" step="0.5">
+            </div>
+            <div class="field">
+              <label class="field-label" for="sleepSeconds">预热等待时间</label>
+              <input id="sleepSeconds" type="number" step="0.5">
+            </div>
+            <div class="field">
+              <label class="field-label" for="perDoiTimeoutSeconds">单篇下载超时</label>
+              <input id="perDoiTimeoutSeconds" type="number" step="1">
+            </div>
+            <div class="field">
+              <label class="field-label" for="perPublisherTimeoutSeconds">单出版方超时</label>
+              <input id="perPublisherTimeoutSeconds" type="number" step="1">
+            </div>
+            <div class="field">
+              <label class="field-label" for="maxParallelPublishers">并行出版方数</label>
+              <input id="maxParallelPublishers" type="number" step="1">
+            </div>
+            <div class="field">
+              <label class="field-label" for="maxWarmupPerPublisher">每方预热标签数</label>
+              <input id="maxWarmupPerPublisher" type="number" step="1">
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:10px;">
+            <div class="checklist">
+              <label class="check"><input id="launchChrome" type="checkbox">端口缺失时自动拉起 Chrome</label>
+              <label class="check"><input id="keepExistingTabs" type="checkbox">保留现有预热标签页</label>
+              <label class="check"><input id="resumeExisting" type="checkbox">复用已下载成功的 DOI</label>
+            </div>
+          </div>
+            </div>
+          </details>
+
+          <div class="field" style="margin-top:14px;">
+            <div class="panel-head">
+              <div>
+                <h3 class="panel-title">归档结果</h3>
+                <p class="note" id="resultsPathText">暂无结果文件</p>
+              </div>
+            </div>
+            <div class="hero-grid" style="margin-top:0;">
+              <div class="metric">
+                <div class="metric-value" id="metricTotalResults">0</div>
+                <div class="metric-label">Processed</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value" id="metricFailed">0</div>
+                <div class="metric-label">Failed / Pending</div>
+              </div>
+              <div class="metric">
+                <div class="metric-value" id="metricDownloadedResults">0</div>
+                <div class="metric-label">Downloaded</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="field" style="margin-top:14px;">
+            <div class="button-row monitor-actions">
+                <button class="button warm" id="warmupBtn">预热浏览器</button>
+                <button class="button primary" id="downloadBtn">开始下载 PDF</button>
+                <button class="button danger" id="stopBtn">停止</button>
+            </div>
+          </div>
+
+          <details class="secondary-panel secondary-diagnostics">
+            <summary>日志与明细记录</summary>
+            <div class="secondary-panel-body">
+              <div class="field">
+                <div class="panel-head">
+                  <div>
+                    <h3 class="panel-title">运行日志</h3>
+                    <p class="note" id="lastCommandText">当前没有运行中的命令</p>
+                  </div>
+                </div>
+                <pre class="console" id="consoleText">等待任务开始...</pre>
+              </div>
+
+              <div class="field" style="margin-top:14px;">
+                <div class="panel-head">
+                  <div>
+                    <h3 class="panel-title">下载明细</h3>
+                    <p class="note">展示前 300 条记录，PDF 会优先归入统一任务目录。</p>
+                  </div>
+                </div>
+                <div class="table-wrap">
+                  <table>
+                    <thead>
+                      <tr>
+                        <th>Publisher</th>
+                        <th>Status</th>
+                        <th>DOI</th>
+                        <th>PDF Path</th>
+                      </tr>
+                    </thead>
+                    <tbody id="resultsBody"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </details>
+        </section>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      Branding references were adapted from official Peking University public identity materials for local non-public use.
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const state = {
+      firstLoad: true,
+      toastHandle: null,
+      pollHandle: null,
+      agentTurns: []
+    };
+
+    function byId(id) { return document.getElementById(id); }
+
+    function setText(id, value) {
+      byId(id).textContent = value == null ? "" : String(value);
+    }
+
+    function showToast(message, isError = false) {
+      const toast = byId("toast");
+      toast.textContent = message;
+      toast.style.background = isError ? "rgba(157,48,40,0.94)" : "rgba(17,13,15,0.94)";
+      toast.classList.add("show");
+      if (state.toastHandle) clearTimeout(state.toastHandle);
+      state.toastHandle = setTimeout(() => toast.classList.remove("show"), 2800);
+    }
+
+    function formatRunStatus(value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "Idle") return "准备就绪";
+      if (/^Running warmup/i.test(raw)) return "正在预热浏览器";
+      if (/^Running download/i.test(raw)) return "正在下载 PDF";
+      if (/^Finished \(0\)/i.test(raw)) return "任务已完成";
+      const failed = raw.match(/^Finished \(([^)]+)\)/i);
+      if (failed) return `任务结束，代码 ${failed[1]}`;
+      return raw
+        .replaceAll("running_download", "正在下载 PDF")
+        .replaceAll("running_warmup", "正在预热浏览器")
+        .replaceAll("complete", "已完成")
+        .replaceAll("partial", "部分完成")
+        .replaceAll("idle", "准备就绪");
+    }
+
+    function formatPublisherName(value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "UNKNOWN") return "待识别来源";
+      return raw;
+    }
+
+    function formatPublisherSummary(value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "0 publishers") return "等待 DOI 队列";
+      return raw
+        .split(",")
+        .map((part) => {
+          const trimmed = part.trim();
+          const match = trimmed.match(/^(.+?)\s+(\d+)$/);
+          if (!match) return trimmed.replaceAll("UNKNOWN", "待识别来源");
+          return `${formatPublisherName(match[1])} ${match[2]} 篇`;
+        })
+        .join(" · ");
+    }
+
+    function formatArchivePath(value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "No run folder yet") return "尚未建立归档";
+      const parts = raw.split(/[\\/]+/);
+      const folder = parts[parts.length - 1] || raw;
+      return folder
+        .replace(/^web_run_/, "临时归档 ")
+        .replace(/^topic_/, "选题归档 ")
+        .replace(/^manual_/, "手动 DOI 归档 ")
+        .replaceAll("_", " ");
+    }
+
+    function formatResultPath(value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "暂无结果文件") return "暂无结果文件";
+      if (/No result CSV found in/i.test(raw)) return "该归档下暂未生成结果表";
+      if (/Run directory does not exist yet/i.test(raw)) return "归档目录尚未创建";
+      if (raw.includes("\\") || raw.includes("/")) {
+        const parts = raw.split(/[\\/]+/);
+        const file = parts.pop() || "";
+        const folder = parts.pop() || "";
+        const fileLabel = file
+          .replace("combined_download_results.csv", "综合归档结果")
+          .replace("download_results.csv", "下载结果")
+          .replaceAll("_", " ");
+        return `${formatArchivePath(folder)} / ${fileLabel}`;
+      }
+      return raw;
+    }
+
+    function formatProgressLabel(value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "No parsed rows yet") return "等待 DOI 队列";
+      const match = raw.match(/^(\d+)\s*\/\s*(\d+)\s*processed$/i);
+      if (match) return `已处理 ${match[1]} / ${match[2]} 条`;
+      return raw.replaceAll("processed", "已处理");
+    }
+
+    function formatProgressMode(value) {
+      const raw = String(value || "").trim();
+      const map = {
+        complete: "已完成",
+        partial: "部分完成",
+        idle: "准备就绪",
+        download: "下载中",
+        warmup: "预热中",
+        running_download: "下载中",
+        running_warmup: "预热中"
+      };
+      return map[raw] || formatRunStatus(raw);
+    }
+
+    function formatPortStatus(value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "offline") return "未连接";
+      if (raw.startsWith("online:")) return raw.replace("online:", "已连接：").trim();
+      if (raw === "invalid port") return "端口需检查";
+      return raw;
+    }
+
+    function formatResultStatus(value) {
+      const raw = String(value || "").trim();
+      if (!raw) return "待处理";
+      const map = {
+        downloaded: "已归档",
+        failed: "下载失败",
+        skipped: "已跳过",
+        pending: "等待处理",
+        timeout: "超时",
+        not_found: "未找到"
+      };
+      return map[raw] || raw;
+    }
+
+    function formatProviderLabel(value) {
+      const raw = String(value || "").trim();
+      const map = {
+        crossref: "Crossref",
+        openalex: "OpenAlex",
+        local_manual: "本地补充",
+        UNKNOWN: "待识别来源"
+      };
+      return map[raw] || formatPublisherName(raw);
+    }
+
+    function formatResearchStatus(value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "Draft a research query, then create terms or run search.") return "等待选题简报";
+      if (/Search run #(\d+) saved\./.test(raw)) return raw.replace(/Search run #(\d+) saved\./, "检索批次 #$1 已保存");
+      if (/Draft #(\d+) created with (\d+) terms\./.test(raw)) return raw.replace(/Draft #(\d+) created with (\d+) terms\./, "关键词方案 #$1 已生成，共 $2 个词");
+      if (/Keywords confirmed in set #(\d+)\./.test(raw)) return raw.replace(/Keywords confirmed in set #(\d+)\./, "关键词方案 #$1 已确认");
+      return raw.replaceAll("Search run", "检索批次").replaceAll("Draft", "关键词方案");
+    }
+
+    function formatResearchSummary(value) {
+      const raw = String(value || "").trim();
+      if (!raw || raw === "No research search run yet.") return "描述研究方向后，生成可确认的关键词方案。";
+      if (raw === "Draft created. Review and edit the terms, then confirm before search.") return "请检查关键词方案；确认后才会检索 DOI 候选。";
+      if (raw === "Keywords confirmed. You can now run provider search.") return "关键词已确认，可以开始检索 DOI 候选。";
+      return raw
+        .replaceAll("Raw", "原始记录")
+        .replaceAll("Unique", "去重后")
+        .replaceAll("Duplicates", "重复")
+        .replaceAll("Overlap", "来源重叠")
+        .replaceAll("Download candidates", "可下载候选");
+    }
+
+    function formatResearchRunId(value) {
+      return value ? `检索批次 #${value}` : "尚未检索";
+    }
+
+    function collectPayload() {
+      syncAgentConversationToResearchBrief();
+      const portMap = {};
+      document.querySelectorAll("[data-port-name]").forEach((input) => {
+        portMap[input.dataset.portName] = input.value.trim();
+      });
+      return {
+        task_name: byId("taskName").value.trim(),
+        input_text: byId("inputText").value,
+        output_dir: byId("outputDir").value.trim(),
+        output_dir_auto: byId("outputDirAuto").checked,
+        page_settle_seconds: byId("pageSettleSeconds").value.trim(),
+        sleep_seconds: byId("sleepSeconds").value.trim(),
+        per_doi_timeout_seconds: byId("perDoiTimeoutSeconds").value.trim(),
+        per_publisher_timeout_seconds: byId("perPublisherTimeoutSeconds").value.trim(),
+        max_parallel_publishers: byId("maxParallelPublishers").value.trim(),
+        max_warmup_per_publisher: byId("maxWarmupPerPublisher").value.trim(),
+        launch_chrome: byId("launchChrome").checked,
+        keep_existing_tabs: byId("keepExistingTabs").checked,
+        resume_existing: byId("resumeExisting").checked,
+        research_query_text: byId("researchQueryText").value,
+        research_limit_per_provider: byId("researchLimit").value.trim(),
+        research_provider_crossref: byId("researchCrossref").checked,
+        research_provider_openalex: byId("researchOpenalex").checked,
+        research_provider_local_manual: byId("researchLocalManual").checked,
+        research_confirmed_terms_text: byId("researchTermsEditor").value,
+        port_map: portMap
+      };
+    }
+
+    function renderAgentThread() {
+      const root = byId("agentThread");
+      if (!root) return;
+      root.innerHTML = `
+        <div class="agent-message agent">
+          <strong>选题研判助手</strong>
+          告诉我主题。我会提炼关键词；闲聊不进简报。
+        </div>
+      `;
+      state.agentTurns.forEach((turn) => {
+        const node = document.createElement("div");
+        node.className = `agent-message ${turn.role}`;
+        node.innerHTML = `<strong>${turn.role === "user" ? "你" : "选题研判助手"}</strong>${escapeHtml(turn.text)}`;
+        root.appendChild(node);
+      });
+      root.scrollTop = root.scrollHeight;
+    }
+
+    function syncAgentConversationToResearchBrief() {
+      const researchBox = byId("researchQueryText");
+      if (!researchBox) return;
+      const researchTurns = state.agentTurns.filter((turn) => (
+        turn.role === "user" && turn.includeInBrief !== false
+      ));
+      const text = researchTurns
+        .map((turn, index) => `第 ${index + 1} 轮研究需求：${turn.normalizedRequirement || turn.text}`)
+        .join("\n\n");
+      if (text) researchBox.value = text;
+      const taskName = byId("taskName");
+      if (taskName && !taskName.value.trim() && researchTurns.length) {
+        taskName.value = (researchTurns[0].taskNameHint || researchTurns[0].normalizedRequirement || researchTurns[0].text).slice(0, 42);
+      }
+    }
+
+    function hasResearchAgentTurns() {
+      return state.agentTurns.some((turn) => (
+        turn.role === "user" && turn.includeInBrief !== false
+      ));
+    }
+
+    function normalizeAgentPayload(payload, originalText) {
+      const agent = payload?.agent || payload || {};
+      const reply = String(agent.reply || "Research Agent 暂不可用：未返回有效回复。");
+      return {
+        includeInBrief: Boolean(agent.include_in_brief ?? agent.includeInBrief),
+        reply: shortenAgentReply(reply),
+        normalizedRequirement: String(agent.normalized_requirement || agent.normalizedRequirement || ""),
+        taskNameHint: String(agent.task_name_hint || agent.taskNameHint || ""),
+        replaceBrief: Boolean(agent.replace_brief ?? agent.replaceBrief),
+        model: String(agent.model || payload?.model || "llm-unavailable"),
+        modelError: String(agent.model_error || agent.modelError || "")
+      };
+    }
+
+    function shortenAgentReply(value, limit = 180) {
+      const text = String(value || "").replace(/\s+/g, " ").trim();
+      if (text.length <= limit) return text;
+      return `${text.slice(0, limit).replace(/[，,；;。 ]+$/, "")}。`;
+    }
+
+    function parseKeywordReply(text) {
+      const value = String(text || "").trim();
+      const match = value.match(/关键词[:：](.+?)(?:。|$)/);
+      if (!match) return [];
+      return match[1]
+        .split(/[；;、,，]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    }
+
+    async function askResearchAgent(value) {
+      syncAgentConversationToResearchBrief();
+      const payload = {
+        message: value,
+        history: state.agentTurns.slice(-4),
+        research_query_text: byId("researchQueryText").value
+      };
+      try {
+        return normalizeAgentPayload(await request("/api/research/agent-turn", "POST", payload), value);
+      } catch (error) {
+        return {
+          includeInBrief: false,
+          reply: "Research Agent 暂不可用：大模型请求失败，请检查 API 配置与本地服务。",
+          normalizedRequirement: "",
+          taskNameHint: "",
+          replaceBrief: false,
+          model: "llm-unavailable",
+          modelError: error.message || "agent request failed"
+        };
+      }
+    }
+
+    async function addAgentTurn(text) {
+      const value = String(text || "").trim();
+      if (!value) {
+        showToast("先写一句研究需求或补充说明。", true);
+        return false;
+      }
+      const addBtn = byId("agentAddTurnBtn");
+      const draftBtn = byId("agentDraftFromChatBtn");
+      addBtn.disabled = true;
+      draftBtn.disabled = true;
+      state.agentTurns.push({
+        role: "user",
+        text: value,
+        includeInBrief: false
+      });
+      state.agentTurns.push({
+        role: "agent",
+        text: "正在理解这轮输入..."
+      });
+      renderAgentThread();
+      const intent = await askResearchAgent(value);
+      const userTurn = state.agentTurns[state.agentTurns.length - 2];
+      const agentTurn = state.agentTurns[state.agentTurns.length - 1];
+      if (intent.replaceBrief) {
+        state.agentTurns = state.agentTurns.filter((turn) => turn === userTurn || turn === agentTurn || turn.includeInBrief === false);
+        byId("researchQueryText").value = "";
+        byId("researchTermsEditor").value = "";
+      }
+      userTurn.includeInBrief = intent.includeInBrief;
+      userTurn.normalizedRequirement = intent.normalizedRequirement;
+      userTurn.replaceBrief = intent.replaceBrief;
+      agentTurn.text = intent.reply;
+      agentTurn.model = intent.model;
+      const keywordTerms = parseKeywordReply(intent.reply);
+      if (keywordTerms.length) {
+        byId("researchTermsEditor").value = keywordTerms.join("\n");
+        try {
+          applyState(await request("/api/analyze", "POST", {
+            ...collectPayload(),
+            research_confirmed_terms_text: keywordTerms.join("\n"),
+            research_keywords_confirmed: false
+          }));
+        } catch (error) {
+          showToast(error.message || "关键词同步失败", true);
+        }
+      }
+      byId("agentComposerText").value = "";
+      syncAgentConversationToResearchBrief();
+      renderAgentThread();
+      addBtn.disabled = false;
+      draftBtn.disabled = false;
+      if (intent.modelError) showToast(`Agent 暂不可用：${intent.modelError}`, true);
+      return true;
+    }
+
+    async function clearResearchAgentSession() {
+      state.agentTurns = [];
+      byId("agentComposerText").value = "";
+      byId("researchQueryText").value = "";
+      byId("researchTermsEditor").value = "";
+      byId("taskName").value = "";
+      renderAgentThread();
+      await runAction("/api/analyze", {
+        ...collectPayload(),
+        task_name: "",
+        research_query_text: "",
+        research_confirmed_terms_text: "",
+        research_confirmed_query_text: "",
+        research_keywords_confirmed: false,
+        research_status_text: "等待研究需求",
+        research_summary_text: "描述研究方向后，生成可确认的关键词方案。",
+        research_title_review_status_text: "",
+        research_title_review_summary_text: "",
+        research_title_review_items_json: "[]",
+        research_last_keyword_set_id: "",
+        research_last_run_id: ""
+      }, "已清空本轮研究简报");
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function populatePortInputs(portMap) {
+      const root = byId("portInputs");
+      if (root.children.length) return;
+      Object.entries(portMap).forEach(([name, port]) => {
+        const wrap = document.createElement("div");
+        wrap.className = "port-card";
+        wrap.innerHTML = `
+          <label class="field-label" for="port-${name}">${name}</label>
+          <input data-port-name="${name}" id="port-${name}" type="number" step="1" value="${port}">
+        `;
+        root.appendChild(wrap);
+      });
+    }
+
+    function renderPreview(rows) {
+      const tbody = byId("previewBody");
+      tbody.innerHTML = "";
+      rows.slice(0, 300).forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td class="mono">${row.idx}</td>
+          <td>${formatPublisherName(row.publisher)}</td>
+          <td class="mono">${row.doi || ""}</td>
+          <td class="mono">${row.url || ""}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      if (!rows.length) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="4" class="note">还没有可解析的 DOI 条目。</td>`;
+        tbody.appendChild(tr);
+      }
+    }
+
+    function renderPorts(rows) {
+      const tbody = byId("portsBody");
+      tbody.innerHTML = "";
+      rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${formatPublisherName(row.publisher)}</td>
+          <td class="mono">${row.port}</td>
+          <td>${formatPortStatus(row.status)}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderResults(results) {
+      const tbody = byId("resultsBody");
+      tbody.innerHTML = "";
+      const rows = results.rows || [];
+      rows.slice(0, 300).forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${formatPublisherName(row.publisher)}</td>
+          <td>${formatResultStatus(row.status)}</td>
+          <td class="mono">${row.doi || ""}</td>
+          <td class="mono">${row.pdf_path || ""}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+      if (!rows.length) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="4" class="note">${results.message || "还没有结果。"}</td>`;
+        tbody.appendChild(tr);
+      }
+      setText("resultsPathText", formatResultPath(results.results_csv || results.message || "暂无结果文件"));
+      setText("metricTotalResults", results.total_rows || 0);
+      setText("metricDownloadedResults", results.status_counts?.downloaded || 0);
+      setText("metricDownloaded", results.status_counts?.downloaded || 0);
+      const failed = Object.entries(results.status_counts || {}).reduce((sum, [status, count]) => (
+        status === "downloaded" ? sum : sum + Number(count || 0)
+      ), 0);
+      setText("metricFailed", failed);
+    }
+
+    function renderProgress(progress) {
+      setText("progressLabel", formatProgressLabel(progress.label));
+      setText("progressModeText", formatProgressMode(progress.mode || progress.status));
+      setText("metricProgressPercent", `${progress.percent || 0}%`);
+      setText("metricRemaining", progress.remaining || 0);
+      byId("progressFill").style.width = `${progress.percent || 0}%`;
+    }
+
+    function renderEffectiveProgress(downloadProgress, research) {
+      const researchProgress = research.progress || {};
+      if (researchProgress.running) {
+        const percent = Math.max(1, Math.min(99, Number(researchProgress.percent || 1)));
+        setText("progressLabel", researchProgress.label || "正在分页采集 DOI 候选");
+        setText("progressModeText", `Research Harvest · ${researchProgress.provider || "采集中"}`);
+        setText("metricProgressPercent", `${percent}%`);
+        setText("metricRemaining", Math.max(0, Number(researchProgress.cap || 0) - Number(researchProgress.fetched || 0)));
+        byId("progressFill").style.width = `${percent}%`;
+        return;
+      }
+      renderProgress(downloadProgress || {});
+    }
+
+    function renderResearch(research) {
+      setText("researchStatusText", formatResearchStatus(research.status_text));
+      setText("researchSummaryText", formatResearchSummary(research.summary_text));
+      setText("researchRunIdText", formatResearchRunId(research.run_id));
+
+      const termsRoot = byId("researchTerms");
+      termsRoot.innerHTML = "";
+      (research.include_terms || []).forEach((term) => {
+        const chip = document.createElement("span");
+        chip.className = "term";
+        chip.textContent = term;
+        termsRoot.appendChild(chip);
+      });
+
+      const providerBody = byId("researchProviderBody");
+      providerBody.innerHTML = "";
+      (research.provider_stats || []).forEach((stat) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${formatProviderLabel(stat.display_name || stat.provider_id)}</td>
+          <td>${stat.returned_count ?? 0}</td>
+          <td>${stat.doi_count ?? 0}</td>
+          <td>${stat.download_candidate_count ?? 0}</td>
+          <td>${stat.status || ""}</td>
+        `;
+        providerBody.appendChild(tr);
+      });
+      if (!(research.provider_stats || []).length) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="5" class="note">确认关键词后，这里会显示各来源返回的候选数量。</td>`;
+        providerBody.appendChild(tr);
+      }
+
+      const recordsBody = byId("researchRecordsBody");
+      recordsBody.innerHTML = "";
+      (research.records || []).slice(0, 300).forEach((record) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+          <td>${formatProviderLabel(record.provider_id)}</td>
+          <td>${record.year || ""}</td>
+          <td class="mono">${record.doi || ""}</td>
+          <td>${record.title || ""}</td>
+        `;
+        recordsBody.appendChild(tr);
+      });
+      if (!(research.records || []).length) {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td colspan="4" class="note">尚无候选文献。确认关键词后即可检索 DOI。</td>`;
+        recordsBody.appendChild(tr);
+      }
+
+      byId("researchSearchBtn").disabled = !research.keywords_confirmed;
+      byId("researchUseBtn").disabled = !(research.records || []).length;
+      byId("reviewTitlesBtn").disabled = !(research.records || []).length;
+      byId("keywordConfirmDot").className = `dot ${research.keywords_confirmed ? "ok" : ""}`;
+      setText("keywordConfirmText", research.keywords_confirmed ? "关键词已确认" : "关键词未确认");
+    }
+
+    function renderTitleReview(research) {
+      setText("titleReviewStatusText", research.title_review_status_text || "尚未校验题名");
+      setText("titleReviewSummaryText", research.title_review_summary_text || "检索 DOI 候选后，可清理重复 DOI、噪声记录并抽检题名。");
+      const root = byId("titleReviewList");
+      root.innerHTML = "";
+      (research.title_review_items || []).slice(0, 30).forEach((item) => {
+        const node = document.createElement("div");
+        node.className = "review-item";
+        node.innerHTML = `
+          <div class="review-head">
+            <div class="review-badge"><span class="dot ${item.status === 'exact_match' || item.status === 'likely_match' ? 'ok' : item.status === 'mismatch' ? 'err' : ''}"></span><span>${item.status}</span></div>
+            <div class="review-badge">score ${item.score ?? 0}</div>
+          </div>
+          <div class="review-copy">
+            <strong>${item.doi || "(no doi)"}</strong>
+            <div><strong>Observed:</strong>${item.observed_title || "(empty)"}</div>
+            <div><strong>Reference:</strong>${item.reference_title || "(none)"}</div>
+            <div>${item.note || ""}</div>
+          </div>
+        `;
+        root.appendChild(node);
+      });
+      if (!(research.title_review_items || []).length) {
+        root.innerHTML = `<div class="review-item"><div class="review-copy">还没有 Review Agent 清洗结果。</div></div>`;
+      }
+    }
+
+    function applyState(payload) {
+      populatePortInputs(payload.port_map || {});
+
+      byId("taskName").value = payload.task_name || "";
+      byId("inputText").value = payload.input_text || "";
+      byId("pageSettleSeconds").value = payload.page_settle_seconds || "";
+      byId("sleepSeconds").value = payload.sleep_seconds || "";
+      byId("perDoiTimeoutSeconds").value = payload.per_doi_timeout_seconds || "";
+      byId("perPublisherTimeoutSeconds").value = payload.per_publisher_timeout_seconds || "";
+      byId("maxParallelPublishers").value = payload.max_parallel_publishers || "";
+      byId("maxWarmupPerPublisher").value = payload.max_warmup_per_publisher || "";
+      byId("launchChrome").checked = Boolean(payload.launch_chrome);
+      byId("keepExistingTabs").checked = Boolean(payload.keep_existing_tabs);
+      byId("resumeExisting").checked = Boolean(payload.resume_existing);
+      if (state.firstLoad || !hasResearchAgentTurns()) {
+        byId("researchQueryText").value = payload.research_query_text || "";
+      } else {
+        syncAgentConversationToResearchBrief();
+      }
+      if (state.firstLoad && payload.research_query_text && !state.agentTurns.length) {
+        state.agentTurns.push({
+          role: "agent",
+          text: "我已载入上次保存的研究简报。你可以继续补充新条件，或先清空研究简报再开始新主题。"
+        });
+        renderAgentThread();
+      }
+      byId("researchLimit").value = payload.research_limit_per_provider || "";
+      byId("researchCrossref").checked = Boolean(payload.research_provider_crossref);
+      byId("researchOpenalex").checked = Boolean(payload.research_provider_openalex);
+      byId("researchLocalManual").checked = Boolean(payload.research_provider_local_manual);
+      byId("outputDirAuto").checked = Boolean(payload.output_dir_auto);
+      if (Boolean(payload.output_dir_auto) || state.firstLoad) {
+        byId("outputDir").value = payload.output_dir || "";
+      }
+
+      const research = payload.research || {};
+      if (state.firstLoad || document.activeElement !== byId("researchTermsEditor")) {
+        byId("researchTermsEditor").value = research.confirmed_terms_text || "";
+      }
+
+      renderPreview(payload.preview_rows || []);
+      renderPorts(payload.port_statuses || []);
+      renderResults(payload.results || {});
+      renderResearch(research);
+      renderEffectiveProgress(payload.progress || {}, research);
+      renderTitleReview(research);
+
+      const publisherCount = Object.keys(payload.publisher_counts || {}).length;
+      setText("metricRows", (payload.preview_rows || []).length);
+      setText("metricPublishers", publisherCount);
+      setText("publisherSummary", formatPublisherSummary(payload.publisher_summary));
+      setText("previewSummary", formatPublisherSummary(payload.publisher_summary));
+      setText("rowCountText", `${(payload.preview_rows || []).length} rows`);
+      setText("runDirText", formatArchivePath(payload.current_run_dir || payload.output_dir));
+      setText("heroTaskName", payload.task_name || "未命名任务");
+      setText("heroTaskHint", payload.output_dir ? `归档位置：${payload.output_dir}` : "任务名将直接进入归档目录命名。");
+
+      const run = payload.run || {};
+      setText("runStatusText", formatRunStatus(run.status_text));
+      setText("lastCommandText", run.current_command || "当前没有运行中的任务");
+      setText("metricExitCode", run.last_exit_code == null ? "-" : run.last_exit_code);
+      const dot = byId("statusDot");
+      dot.className = "dot";
+      if (run.running) {
+        dot.classList.add("ok");
+      } else if (run.last_exit_code != null && Number(run.last_exit_code) !== 0) {
+        dot.classList.add("err");
+      }
+      byId("consoleText").textContent = (run.logs || []).join("\n") || "等待采集任务开始...";
+
+      state.firstLoad = false;
+    }
+
+    async function request(path, method = "GET", payload = null) {
+      const options = { method, headers: {} };
+      if (payload !== null) {
+        options.headers["Content-Type"] = "application/json";
+        options.body = JSON.stringify(payload);
+      }
+      const response = await fetch(path, options);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.error || `${response.status} ${response.statusText}`);
+      }
+      return data;
+    }
+
+    async function refreshState() {
+      try {
+        const payload = await request("/api/state");
+        applyState(payload);
+      } catch (error) {
+        showToast(error.message || "刷新状态失败", true);
+      }
+    }
+
+    async function runAction(path, payload = null, successMessage = "") {
+      try {
+        const data = await request(path, "POST", payload);
+        applyState(data);
+        if (successMessage) showToast(successMessage);
+      } catch (error) {
+        showToast(error.message || "请求失败", true);
+      }
+    }
+
+    function bindEvents() {
+      byId("analyzeBtn").addEventListener("click", () => runAction("/api/analyze", collectPayload(), "DOI 队列已解析"));
+      byId("warmupBtn").addEventListener("click", () => runAction("/api/start", { ...collectPayload(), mode: "warmup" }, "浏览器预热已启动"));
+      byId("downloadBtn").addEventListener("click", () => runAction("/api/start", { ...collectPayload(), mode: "download" }, "PDF 下载已启动"));
+      byId("stopBtn").addEventListener("click", () => runAction("/api/stop", null, "已请求停止任务"));
+      byId("openOutputBtn").addEventListener("click", () => runAction("/api/open-output", collectPayload(), "已打开输出目录"));
+      byId("openResultsBtn").addEventListener("click", () => runAction("/api/open-results", null, "已打开结果 CSV"));
+      byId("researchDraftBtn").addEventListener("click", () => runAction("/api/research/draft", collectPayload(), "Agent 已生成关键词草案"));
+      byId("researchConfirmBtn").addEventListener("click", () => runAction("/api/research/confirm", collectPayload(), "关键词已确认"));
+      byId("researchSearchBtn").addEventListener("click", () => {
+        renderEffectiveProgress({}, { progress: { running: true, percent: 1, label: "正在提交 DOI 全量采集任务", provider: "Research Harvest", fetched: 0, cap: Number(byId("researchLimit").value || 0) } });
+        runAction("/api/research/search", collectPayload(), "DOI 候选检索已完成");
+      });
+      byId("researchUseBtn").addEventListener("click", () => runAction("/api/research/use-results", null, "候选 DOI 已导入下载队列"));
+      byId("reviewTitlesBtn").addEventListener("click", () => runAction("/api/research/review-titles", collectPayload(), "Review Agent 已完成清洗"));
+      byId("agentAddTurnBtn").addEventListener("click", () => {
+        addAgentTurn(byId("agentComposerText").value);
+      });
+      byId("agentDraftFromChatBtn").addEventListener("click", async () => {
+        const text = byId("agentComposerText").value;
+        if (text.trim()) await addAgentTurn(text);
+        runAction("/api/research/draft", collectPayload(), "Agent 已更新关键词草案");
+      });
+      byId("agentClearBtn").addEventListener("click", clearResearchAgentSession);
+
+      byId("outputDirAuto").addEventListener("change", () => runAction("/api/analyze", collectPayload()));
+      byId("taskName").addEventListener("change", () => runAction("/api/analyze", collectPayload()));
+      byId("researchQueryText").addEventListener("change", () => runAction("/api/analyze", collectPayload()));
+      byId("inputText").addEventListener("change", () => runAction("/api/analyze", collectPayload()));
+
+      document.addEventListener("visibilitychange", () => {
+        if (!document.hidden) refreshState();
+      });
+    }
+
+    function hideSplash() {
+      byId("splashScreen").classList.add("hidden");
+    }
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("/sw.js").catch(() => {});
+      });
+    }
+
+    function bindQuickActions() {
+      byId("quickAnalyzeBtn").addEventListener("click", () => runAction("/api/analyze", collectPayload(), "输入已解析"));
+      byId("quickWarmupBtn").addEventListener("click", () => runAction("/api/start", { ...collectPayload(), mode: "warmup" }, "浏览器预热已启动"));
+      byId("quickDownloadBtn").addEventListener("click", () => runAction("/api/start", { ...collectPayload(), mode: "download" }, "PDF 下载已启动"));
+    }
+
+    function initAmbientCanvas() {
+      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+      const canvas = byId("ambientCanvas");
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d", { alpha: true });
+      const nodes = [];
+      let width = 0;
+      let height = 0;
+      let raf = 0;
+
+      function resize() {
+        const ratio = Math.min(window.devicePixelRatio || 1, 2);
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = Math.floor(width * ratio);
+        canvas.height = Math.floor(height * ratio);
+        canvas.style.width = `${width}px`;
+        canvas.style.height = `${height}px`;
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+        nodes.length = 0;
+        const count = Math.min(54, Math.max(28, Math.floor(width / 48)));
+        for (let i = 0; i < count; i += 1) {
+          nodes.push({
+            x: Math.random() * width,
+            y: Math.random() * height,
+            vx: (Math.random() - 0.5) * 0.14,
+            vy: (Math.random() - 0.5) * 0.12,
+            r: Math.random() * 1.8 + 0.8
+          });
+        }
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, width, height);
+        ctx.lineWidth = 1;
+        for (let i = 0; i < nodes.length; i += 1) {
+          const a = nodes[i];
+          a.x += a.vx;
+          a.y += a.vy;
+          if (a.x < -40) a.x = width + 40;
+          if (a.x > width + 40) a.x = -40;
+          if (a.y < -40) a.y = height + 40;
+          if (a.y > height + 40) a.y = -40;
+
+          ctx.beginPath();
+          ctx.fillStyle = "rgba(139, 0, 18, 0.26)";
+          ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2);
+          ctx.fill();
+
+          for (let j = i + 1; j < nodes.length; j += 1) {
+            const b = nodes[j];
+            const dx = a.x - b.x;
+            const dy = a.y - b.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance < 170) {
+              const alpha = (1 - distance / 170) * 0.12;
+              ctx.strokeStyle = `rgba(139, 0, 18, ${alpha})`;
+              ctx.beginPath();
+              ctx.moveTo(a.x, a.y);
+              ctx.lineTo(b.x, b.y);
+              ctx.stroke();
+            }
+          }
+        }
+        raf = requestAnimationFrame(draw);
+      }
+
+      resize();
+      draw();
+      window.addEventListener("resize", () => {
+        cancelAnimationFrame(raf);
+        resize();
+        draw();
+      }, { passive: true });
+    }
+
+    bindEvents();
+    bindQuickActions();
+    initAmbientCanvas();
+    refreshState();
+    state.pollHandle = setInterval(refreshState, 2500);
+    window.addEventListener("load", () => setTimeout(hideSplash, 900));
+  </script>
+</body>
+</html>

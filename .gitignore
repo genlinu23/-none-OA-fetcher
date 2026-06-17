@@ -1,0 +1,67 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Node / frontend
+node_modules/
+ligen_downloader/web_frontend/dist/
+*.tsbuildinfo
+vite.config.js
+vite.config.d.ts
+
+# Build artifacts
+build/
+dist/
+tmp_dist_test/
+backup_before*/
+*.spec
+*.exe
+*.msi
+*.zip
+
+# Local runtime data
+downloads/
+outputs/
+download_inputs/
+logs/
+verification_screenshots/
+chrome-cdp-multiport/
+*.log
+*.sqlite
+*.sqlite3
+*.db
+
+# Browser profiles and sessions
+**/Default/Network/
+**/Default/Sessions/
+**/Default/Session Storage/
+**/Default/Safe Browsing Network/
+**/Cookies
+**/Cookies-journal
+**/Local State
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+agent_config.json
+*secret*
+*credentials*
+*token*
+
+# Local working notes
+task_plan*.md
+notes*.md
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

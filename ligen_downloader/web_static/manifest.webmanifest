@@ -1,0 +1,24 @@
+{
+  "name": "Peking University Literature Console",
+  "short_name": "PKU Papers",
+  "description": "Local-only PKU-branded DOI harvesting and literature review console.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#8b0012",
+  "theme_color": "#8b0012",
+  "icons": [
+    {
+      "src": "/assets/pku-icon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/pku-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}
