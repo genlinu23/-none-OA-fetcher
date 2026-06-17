@@ -180,14 +180,13 @@ export default function App() {
             asText(payload.research?.confirmed_terms_text) || asText(payload.research_confirmed_terms_text),
           research_search_strategy:
             asText(payload.research?.search_strategy) || asText(payload.research_search_strategy) || "quality",
-          agent_api_key: "",
+          agent_api_key: editingFields.current.has("agent_api_key") ? asText(current.agent_api_key) : "",
           agent_base_url:
             asText(payload.research?.agent_config?.base_url) || asText(current.agent_base_url),
           agent_model:
             asText(payload.research?.agent_config?.model) || asText(current.agent_model)
         };
         editingFields.current.forEach((field) => {
-          if (field === "agent_api_key") return;
           next[field] = current[field];
         });
         return next;
@@ -241,6 +240,10 @@ export default function App() {
     try {
       setError("");
       mergeState(await api<AppState>(path, "POST", { ...payload(), ...extra }));
+      if (path === "/api/analyze" || path === "/api/research/test-agent") {
+        editingFields.current.delete("agent_api_key");
+        setForm((current) => ({ ...current, agent_api_key: "" }));
+      }
       if (success) showToast(success);
     } catch (err) {
       setError(err instanceof Error ? err.message : "请求失败");
