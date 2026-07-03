@@ -587,6 +587,68 @@ def build_wiley_candidates(landing_url: str, source_url: str, links: list[dict],
     return list(dict.fromkeys(candidates + exact_links))
 
 
+def build_mdpi_candidates(landing_url: str, source_url: str, doi: str) -> list[str]:
+    candidates: list[str] = []
+    base_mdpi = landing_url if "mdpi.com" in landing_url else source_url
+    tail = doi.split("/", 1)[1] if "/" in doi else ""
+    journal_match = re.match(r"([a-z]+)", tail, flags=re.I)
+    journal_code = journal_match.group(1).lower() if journal_match else ""
+    resource_code_map = {
+        "catal": "catalysts",
+        "nano": "nanomaterials",
+        "su": "sustainability",
+    }
+    resource_codes = list(
+        dict.fromkeys(
+            code
+            for code in (resource_code_map.get(journal_code, journal_code), journal_code)
+            if code
+        )
+    )
+
+    def add_resource(volume_text: str, article_text: str) -> None:
+        if not resource_codes:
+            return
+        try:
+            volume = int(volume_text)
+            article_number = int(article_text)
+        except ValueError:
+            return
+        for resource_code in resource_codes:
+            stem = f"{resource_code}-{volume:02d}-{article_number:05d}"
+            candidates.extend(
+                [
+                    f"https://mdpi-res.com/d_attachment/{resource_code}/{stem}/article_deploy/{stem}.pdf",
+                    f"https://mdpi-res.com/d_attachment/{resource_code}/{stem}/article_deploy/{stem}-v2.pdf",
+                    f"https://mdpi-res.com/d_attachment/{resource_code}/{stem}/article_deploy/{stem}-v3.pdf",
+                ]
+            )
+
+    if "mdpi.com" in base_mdpi:
+        parsed = urlparse(base_mdpi)
+        parts = [part for part in parsed.path.split("/") if part and part.lower() not in {"pdf", "htm", "html"}]
+        # MDPI article pages use /ISSN/volume/issue/article. The DOI tail alone
+        # is ambiguous, so prefer the resolved landing URL for the resource PDF.
+        if len(parts) >= 4 and re.fullmatch(r"\d+", parts[-3]) and re.fullmatch(r"\d+", parts[-1]):
+            add_resource(parts[-3], parts[-1])
+        candidates.extend(
+            [
+                f"{base_mdpi.rstrip('/')}/pdf-vor",
+                f"{base_mdpi.rstrip('/')}/pdf",
+                f"{base_mdpi.rstrip('/')}/pdf?download=1",
+            ]
+        )
+
+    digits_match = re.match(r"([a-z]+)(\d{4,})$", tail, flags=re.I)
+    if digits_match:
+        digits = digits_match.group(2)
+        # Fallback only: common MDPI tails look like journal + VV + II + article.
+        # The landing URL path above is more reliable when DOI redirects succeed.
+        add_resource(digits[:2], digits[4:])
+
+    return list(dict.fromkeys(candidates))
+
+
 def classify_candidates(
     landing_url: str,
     source_url: str,
@@ -672,28 +734,7 @@ def classify_candidates(
                     continue
             candidates.append(href)
     if doi.startswith("10.3390/"):
-        base_mdpi = landing_url if "mdpi.com" in landing_url else source_url
-        if "mdpi.com" in base_mdpi:
-            candidates.extend(
-                [
-                    f"{base_mdpi.rstrip('/')}/pdf",
-                    f"{base_mdpi.rstrip('/')}/pdf?download=1",
-                ]
-            )
-        tail = doi.split("/", 1)[1]
-        journal_match = re.match(r"([a-z]+)(\d+)$", tail)
-        if journal_match:
-            journal_code = journal_match.group(1)
-            digits = journal_match.group(2)
-            article_number = int(digits[-4:])
-            volume = digits[:-4] or "0"
-            stem = f"{journal_code}-{int(volume):02d}-{article_number:05d}"
-            candidates.extend(
-                [
-                    f"https://mdpi-res.com/d_attachment/{journal_code}/{stem}/article_deploy/{stem}.pdf",
-                    f"https://mdpi-res.com/d_attachment/{journal_code}/{stem}/article_deploy/{stem}-v2.pdf",
-                ]
-            )
+        candidates.extend(build_mdpi_candidates(landing_url, source_url, doi))
     return list(dict.fromkeys(candidates))
 
 

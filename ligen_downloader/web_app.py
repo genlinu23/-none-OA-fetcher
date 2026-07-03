@@ -331,7 +331,7 @@ class LigenWebController:
         current_run_dir = run_state.get("current_run_dir") or state.get("last_run_dir") or ""
         if current_run_dir and not run_state.get("running") and not _run_dir_matches_preview(Path(current_run_dir), preview_rows):
             current_run_dir = ""
-        results = _summarize_results(Path(current_run_dir)) if current_run_dir else _empty_results()
+        results = _summarize_results(Path(current_run_dir), preview_rows=preview_rows) if current_run_dir else _empty_results()
         progress = _build_progress_snapshot(
             preview_rows=preview_rows,
             run_state=run_state,
@@ -1068,13 +1068,32 @@ def _run_dir_matches_preview(run_dir: Path, preview_rows: list[dict[str, str]]) 
     return stored_lines == current_lines
 
 
-def _summarize_results(run_dir: Path) -> dict[str, Any]:
+def _preview_doi_filter(preview_rows: list[dict[str, str]] | None) -> set[str]:
+    return {
+        str(row.get("doi") or "").strip().lower()
+        for row in (preview_rows or [])
+        if str(row.get("doi") or "").strip()
+    }
+
+
+def _filter_rows_by_doi(rows: list[dict[str, str]], allowed_dois: set[str]) -> list[dict[str, str]]:
+    if not allowed_dois:
+        return rows
+    return [
+        row
+        for row in rows
+        if str(row.get("doi") or "").strip().lower() in allowed_dois
+    ]
+
+
+def _summarize_results(run_dir: Path, preview_rows: list[dict[str, str]] | None = None) -> dict[str, Any]:
     if not run_dir.exists():
         return {
             **_empty_results(),
             "message": f"Run directory does not exist yet: {run_dir}",
         }
-    _materialize_partial_run_outputs(run_dir)
+    allowed_dois = _preview_doi_filter(preview_rows)
+    _materialize_partial_run_outputs(run_dir, allowed_dois=allowed_dois)
     candidates = [
         run_dir / "combined_download_results.csv",
         run_dir / "download_results.csv",
@@ -1089,6 +1108,7 @@ def _summarize_results(run_dir: Path) -> dict[str, Any]:
                 merged_row = dict(row)
                 merged_row.setdefault("publisher", publisher)
                 partial_rows.append(merged_row)
+        partial_rows = _filter_rows_by_doi(partial_rows, allowed_dois)
         if partial_rows:
             counts = Counter((row.get("status") or "").strip() for row in partial_rows)
             return {
@@ -1102,7 +1122,10 @@ def _summarize_results(run_dir: Path) -> dict[str, Any]:
             **_empty_results(),
             "message": f"No result CSV found in {run_dir}",
         }
-    rows = list(csv.DictReader(target.open("r", encoding="utf-8-sig", newline="")))
+    rows = _filter_rows_by_doi(
+        list(csv.DictReader(target.open("r", encoding="utf-8-sig", newline=""))),
+        allowed_dois,
+    )
     counts = Counter((row.get("status") or "").strip() for row in rows)
     return {
         "message": "",
@@ -1120,7 +1143,7 @@ def _resolve_current_run_dir(state: dict[str, Any], run_state: dict[str, Any]) -
     return Path(raw).expanduser().resolve()
 
 
-def _materialize_partial_run_outputs(run_dir: Path) -> dict[str, Any]:
+def _materialize_partial_run_outputs(run_dir: Path, allowed_dois: set[str] | None = None) -> dict[str, Any]:
     publisher_root = run_dir / "publisher_runs"
     if not publisher_root.exists():
         return {"combined_results": 0, "combined_map": 0, "copied_pdfs": 0}
@@ -1131,9 +1154,9 @@ def _materialize_partial_run_outputs(run_dir: Path) -> dict[str, Any]:
         results_csv = publisher_dir / "download_results.csv"
         map_csv = publisher_dir / "downloaded_doi_filename_map.csv"
         if results_csv.exists():
-            combined_results.extend(_read_csv_rows(results_csv, publisher_dir.name))
+            combined_results.extend(_filter_rows_by_doi(_read_csv_rows(results_csv, publisher_dir.name), allowed_dois or set()))
         if map_csv.exists():
-            combined_map.extend(_read_csv_rows(map_csv, publisher_dir.name))
+            combined_map.extend(_filter_rows_by_doi(_read_csv_rows(map_csv, publisher_dir.name), allowed_dois or set()))
 
     if not combined_results and not combined_map:
         return {"combined_results": 0, "combined_map": 0, "copied_pdfs": 0}
