@@ -329,6 +329,8 @@ class LigenWebController:
         publisher_counts = Counter(row["publisher"] for row in preview_rows)
         run_state = self.monitor.snapshot()
         current_run_dir = run_state.get("current_run_dir") or state.get("last_run_dir") or ""
+        if current_run_dir and not run_state.get("running") and not _run_dir_matches_preview(Path(current_run_dir), preview_rows):
+            current_run_dir = ""
         results = _summarize_results(Path(current_run_dir)) if current_run_dir else _empty_results()
         progress = _build_progress_snapshot(
             preview_rows=preview_rows,
@@ -1024,10 +1026,10 @@ def _build_progress_snapshot(
 ) -> dict[str, Any]:
     total = len(preview_rows)
     counts = results.get("status_counts") or {}
-    completed = int(results.get("total_rows") or 0)
+    completed = min(int(results.get("total_rows") or 0), total) if total > 0 else int(results.get("total_rows") or 0)
     downloaded = int(counts.get("downloaded") or 0)
     failed_or_pending = sum(int(value or 0) for key, value in counts.items() if key != "downloaded")
-    percent = round((completed / total) * 100, 1) if total > 0 else 0.0
+    percent = min(100.0, round((completed / total) * 100, 1)) if total > 0 else 0.0
     mode = str(run_state.get("current_mode") or "")
     status = "idle"
     if run_state.get("running"):
@@ -1052,6 +1054,18 @@ def _build_progress_snapshot(
         "percent": percent,
         "label": label,
     }
+
+
+def _run_dir_matches_preview(run_dir: Path, preview_rows: list[dict[str, str]]) -> bool:
+    input_path = run_dir / "web_input.txt"
+    if not input_path.exists():
+        return False
+    try:
+        stored_lines = [line.strip() for line in input_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+    except Exception:
+        return False
+    current_lines = [str(row.get("raw") or "").strip() for row in preview_rows if str(row.get("raw") or "").strip()]
+    return stored_lines == current_lines
 
 
 def _summarize_results(run_dir: Path) -> dict[str, Any]:

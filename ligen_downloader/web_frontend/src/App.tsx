@@ -162,7 +162,7 @@ export default function App() {
   const searchStrategy = asText(form.research_search_strategy || research.search_strategy, "quality") === "recall" ? "recall" : "quality";
   const effectivePercent = researchProgress.running
     ? Math.max(1, Math.min(99, safeNumber(researchProgress.percent, 1)))
-    : safeNumber(progress.percent, 0);
+    : Math.max(0, Math.min(100, safeNumber(progress.percent, 0)));
 
   const showToast = (message: string) => {
     setToast(message);
