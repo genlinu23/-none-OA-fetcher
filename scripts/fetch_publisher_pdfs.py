@@ -98,6 +98,23 @@ def matches_elsevier_pii(url: str, target_pii: str) -> bool:
     return target_pii.lower() in (url or "").lower()
 
 
+def is_elsevier_pdf_candidate_url(href: str, text: str, target_pii: str = "") -> bool:
+    href_lower = (href or "").lower()
+    text_lower = (text or "").lower()
+    if "sciencedirect.com" not in href_lower and "sciencedirectassets.com" not in href_lower:
+        return False
+    if target_pii and not matches_elsevier_pii(href, target_pii):
+        return False
+    return (
+        "view pdf" in text_lower
+        or "download pdf" in text_lower
+        or "main.pdf" in href_lower
+        or "/pdfft?" in href_lower
+        or "/pdf?" in href_lower
+        or href_lower.endswith("/pdf")
+    )
+
+
 def open_cdp_page(port: int, url: str) -> dict:
     req = Request(f"http://127.0.0.1:{port}/json/new?{quote(url, safe=':/?&=%')}", method="PUT")
     with urlopen(req, timeout=20) as resp:
@@ -175,7 +192,7 @@ def fetch_in_page(ws_url: str, url: str, msg_id: int = 2) -> dict:
           ct: r.headers.get('content-type') || '',
           finalUrl: r.url,
           isPdf,
-          textSnippet,
+          textSnippet: textSnippet.slice(0, 20000),
           b64,
         });
       } catch (e) {
@@ -587,14 +604,7 @@ def classify_candidates(
             text = (link.get("text") or "").strip().lower()
             if not href.startswith("http"):
                 continue
-            if pii and pii in href and "sciencedirect.com" in href and ("view pdf" in text or "main.pdf" in href or "/pdfft?" in href or "/pdf?" in href):
-                candidates.append(href)
-        for link in links:
-            href = (link.get("href") or "").replace("&amp;", "&")
-            text = (link.get("text") or "").strip().lower()
-            if not href.startswith("http"):
-                continue
-            if "sciencedirect.com" in href and ("view pdf" in text or "main.pdf" in href or "/pdfft?" in href or "/pdf?" in href):
+            if is_elsevier_pdf_candidate_url(href, text, pii):
                 candidates.append(href)
     for url in meta_pdf_urls or []:
         if url:
@@ -656,6 +666,10 @@ def classify_candidates(
             or "open pdf" in text
             or text == "pdf"
         ):
+            if is_elsevier_row(doi, source_url) or is_elsevier_row(doi, landing_url):
+                pii = extract_elsevier_pii(landing_url) or extract_elsevier_pii(source_url)
+                if ("sciencedirect.com" in href.lower() or "sciencedirectassets.com" in href.lower()) and not is_elsevier_pdf_candidate_url(href, text, pii):
+                    continue
             candidates.append(href)
     if doi.startswith("10.3390/"):
         base_mdpi = landing_url if "mdpi.com" in landing_url else source_url
