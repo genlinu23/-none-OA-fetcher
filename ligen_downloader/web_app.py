@@ -1309,7 +1309,7 @@ def _save_agent_config_from_payload(payload: dict[str, Any]) -> None:
                 changed = True
                 current.pop(target_key, None)
     if changed:
-        for key in ("last_test_ok", "last_test_at", "last_test_message"):
+        for key in ("last_test_ok", "last_test_at", "last_test_message", "last_test_kind"):
             current.pop(key, None)
     AGENT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     AGENT_CONFIG_PATH.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -1353,11 +1353,17 @@ def _agent_config_status() -> dict[str, Any]:
         or DEFAULT_AGENT_BASE_URL
     ).rstrip("/")
     model = saved.get("model", "").strip() or os.environ.get("LIGEN_AGENT_MODEL", "").strip() or DEFAULT_AGENT_MODEL
+    last_test_kind = str(saved.get("last_test_kind") or "")
+    last_test_message = saved.get("last_test_message", "")
+    if last_test_message and last_test_kind != "agent_protocol":
+        last_test_message = "旧版 API 连通测试记录已作废，请重新测试 Agent 协议。"
     return {
         "available": bool(api_key),
-        "verified": str(saved.get("last_test_ok") or "").lower() == "true",
+        "verified": str(saved.get("last_test_ok") or "").lower() == "true"
+        and last_test_kind == "agent_protocol",
         "last_test_at": saved.get("last_test_at", ""),
-        "last_test_message": saved.get("last_test_message", ""),
+        "last_test_message": last_test_message,
+        "last_test_kind": last_test_kind,
         "model": model,
         "base_url": base_url,
         "source": "local_settings" if saved_api_key else ("environment" if env_api_key else "missing"),
@@ -1370,16 +1376,17 @@ def _agent_config_status() -> dict[str, Any]:
     }
 
 
-def _save_agent_connection_test(ok: bool, message: str) -> None:
+def _save_agent_connection_test(ok: bool, message: str, kind: str = "agent_protocol") -> None:
     current = _load_agent_config_file()
     current["last_test_ok"] = "true" if ok else "false"
     current["last_test_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     current["last_test_message"] = message[:240]
+    current["last_test_kind"] = kind
     AGENT_CONFIG_PATH.parent.mkdir(parents=True, exist_ok=True)
     AGENT_CONFIG_PATH.write_text(json.dumps(current, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
-def _test_agent_connection() -> dict[str, Any]:
+def _test_agent_connection_legacy_ping() -> dict[str, Any]:
     config = _agent_llm_config()
     if not config:
         message = "未检测到 API Key。"
@@ -1417,6 +1424,36 @@ def _test_agent_connection() -> dict[str, Any]:
         message = f"连接失败：{type(exc).__name__}: {exc}"
         _save_agent_connection_test(False, message)
         return {"ok": False, "message": message}
+
+
+def _test_agent_connection() -> dict[str, Any]:
+    config = _agent_llm_config()
+    if not config:
+        message = "未检测到 API Key。"
+        _save_agent_connection_test(False, message)
+        return {"ok": False, "message": message, "kind": "agent_protocol"}
+    try:
+        payload = _call_research_agent_llm(
+            message="Transformer computer vision papers",
+            history=[],
+            current_brief="",
+            config=config,
+        )
+        if payload.get("model_error"):
+            raise RuntimeError(str(payload.get("model_error")))
+        if not isinstance(payload.get("include_in_brief"), bool):
+            raise ValueError("Agent payload missing boolean include_in_brief.")
+        if not str(payload.get("reply") or "").strip():
+            raise ValueError("Agent payload missing reply.")
+        if str(payload.get("model") or "") != config["model"]:
+            raise ValueError("Agent payload model mismatch.")
+        message = f"Agent 协议可用：{config['model']} · {config['base_url']}"
+        _save_agent_connection_test(True, message)
+        return {"ok": True, "message": message, "kind": "agent_protocol", "sample": payload}
+    except Exception as exc:
+        message = f"Agent 协议失败：{type(exc).__name__}: {exc}"
+        _save_agent_connection_test(False, message)
+        return {"ok": False, "message": message, "kind": "agent_protocol"}
 
 
 def _build_research_agent_reply(
