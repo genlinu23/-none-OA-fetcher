@@ -4,6 +4,7 @@ import json
 import time
 from pathlib import Path
 from urllib.parse import quote
+from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
 
@@ -19,7 +20,53 @@ def list_cdp_pages(port: int) -> list[dict]:
     return payload if isinstance(payload, list) else []
 
 
-def reusable_pages(port: int) -> list[dict]:
+PUBLISHER_REUSABLE_HOSTS = {
+    "ACS": ("pubs.acs.org",),
+    "AIP": ("aip.scitation.org",),
+    "ECS": ("iopscience.iop.org", "ecsdl.org"),
+    "Elsevier": ("sciencedirect.com", "linkinghub.elsevier.com", "pdf.sciencedirectassets.com"),
+    "Frontiers": ("frontiersin.org",),
+    "IOP": ("iopscience.iop.org",),
+    "MDPI": ("mdpi.com", "mdpi-res.com"),
+    "Nature": ("nature.com",),
+    "OSTI": ("osti.gov",),
+    "Oxford": ("academic.oup.com",),
+    "PNAS": ("pnas.org",),
+    "RSC": ("pubs.rsc.org",),
+    "Springer": ("springer.com", "link.springer.com"),
+    "Wiley": ("onlinelibrary.wiley.com",),
+}
+
+
+AUTH_OR_ERROR_HOSTS = (
+    "id.elsevier.com",
+    "id.elsevier-ae.com",
+    "id.rsc.org",
+    "sso.rsc.org",
+)
+
+
+def is_reusable_page_for_publisher(page: dict, publisher: str) -> bool:
+    url = str(page.get("url") or "").strip()
+    title = str(page.get("title") or "").strip().lower()
+    if not url or url.startswith(("chrome://", "devtools://", "chrome-error://")):
+        return False
+    parsed = urlparse(url)
+    host = parsed.netloc.lower()
+    path = parsed.path.lower()
+    if any(auth_host in host for auth_host in AUTH_OR_ERROR_HOSTS):
+        return False
+    if "authorize" in path or "authorization.oauth" in path or "signin" in path or "login" in path:
+        return False
+    if "无法访问此网站" in title or "err_connection" in title or "timed out" in title:
+        return False
+    allowed_hosts = PUBLISHER_REUSABLE_HOSTS.get(publisher, ())
+    if not allowed_hosts:
+        return True
+    return any(allowed_host in host for allowed_host in allowed_hosts)
+
+
+def reusable_pages(port: int, publisher: str) -> list[dict]:
     try:
         pages = list_cdp_pages(port)
     except Exception:
@@ -28,8 +75,7 @@ def reusable_pages(port: int) -> list[dict]:
     for page in pages:
         if not isinstance(page, dict) or page.get("type") != "page":
             continue
-        url = str(page.get("url") or "").strip()
-        if not url or url.startswith(("chrome://", "devtools://")):
+        if not is_reusable_page_for_publisher(page, publisher):
             continue
         reusable.append(page)
     return reusable
@@ -61,7 +107,7 @@ def main():
         title = (row.get("title") or "").strip()
         publisher = (row.get("publisher") or "").strip() or "UNKNOWN"
         if publisher not in reused_per_publisher and args.max_per_publisher > 0:
-            existing_pages = reusable_pages(args.cdp_port)
+            existing_pages = reusable_pages(args.cdp_port, publisher)
             reused_per_publisher[publisher] = min(len(existing_pages), args.max_per_publisher)
             opened_per_publisher[publisher] = reused_per_publisher[publisher]
             for page in existing_pages[: args.max_per_publisher]:
